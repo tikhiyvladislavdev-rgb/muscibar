@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
 const crypto = require('crypto');
+const { spawn } = require('child_process');
 
 const PORT = process.env.PORT || 8787;
 const ROOT = __dirname;
@@ -15,7 +16,74 @@ const GITHUB_RAW = process.env.GITHUB_RAW ||
 const STATE_FILE = path.join(ROOT, 'data-state.json');
 const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_URL || '';
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || ''; // optional extra secret
-const MUSIC_DIR = path.join(ROOT, 'music');
+
+
+// ---------- Yandex Music unofficial API bridge ----------
+// Uses the popular MarshalX/yandex-music-api Python library when installed.
+// The bridge is optional: MUSCIBAR keeps working with Deezer/iTunes if Python
+// or the package is unavailable. Set YANDEX_MUSIC_TOKEN for authenticated API.
+let yandexBridge = null;
+let yandexSeq = 0;
+const yandexPending = new Map();
+let yandexBuffer = '';
+
+function startYandexBridge() {
+  if (yandexBridge) return;
+  const script = path.join(ROOT, 'yandex_bridge.py');
+  if (!fs.existsSync(script)) return;
+  const python = process.env.PYTHON_BIN || (process.platform === 'win32' ? 'python' : 'python3');
+  try {
+    yandexBridge = spawn(python, [script], {
+      cwd: ROOT,
+      env: { ...process.env },
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    yandexBridge.stdout.on('data', chunk => {
+      yandexBuffer += chunk.toString('utf8');
+      let idx;
+      while ((idx = yandexBuffer.indexOf('\n')) >= 0) {
+        const line = yandexBuffer.slice(0, idx).trim();
+        yandexBuffer = yandexBuffer.slice(idx + 1);
+        if (!line) continue;
+        try {
+          const msg = JSON.parse(line);
+          const pending = yandexPending.get(msg.id);
+          if (!pending) continue;
+          yandexPending.delete(msg.id);
+          if (msg.ok) pending.resolve(msg.data);
+          else pending.reject(new Error(msg.error || 'Yandex API error'));
+        } catch (_) {}
+      }
+    });
+    yandexBridge.stderr.on('data', chunk => console.warn('[Yandex]', chunk.toString().trim()));
+    yandexBridge.on('exit', () => {
+      for (const [, p] of yandexPending) p.reject(new Error('Yandex bridge stopped'));
+      yandexPending.clear();
+      yandexBridge = null;
+      yandexBuffer = '';
+    });
+    yandexBridge.on('error', () => { yandexBridge = null; });
+  } catch (_) { yandexBridge = null; }
+}
+
+function yandexCall(action, payload = {}, timeoutMs = 15000) {
+  startYandexBridge();
+  if (!yandexBridge || !yandexBridge.stdin.writable) {
+    return Promise.reject(new Error('Yandex API bridge is not installed. Run: pip install -r requirements-yandex.txt'));
+  }
+  const id = ++yandexSeq;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      yandexPending.delete(id);
+      reject(new Error('Yandex API timeout'));
+    }, timeoutMs);
+    yandexPending.set(id, {
+      resolve: data => { clearTimeout(timer); resolve(data); },
+      reject: err => { clearTimeout(timer); reject(err); }
+    });
+    yandexBridge.stdin.write(JSON.stringify({ id, action, ...payload }) + '\n');
+  });
+}
 
 // ---------- state ----------
 let state = {
@@ -250,10 +318,14 @@ async function unifiedSearch(q) {
     tasks.push(fetchJson('https://itunes.apple.com/search?term=' + encodeURIComponent(qq) + '&entity=song&limit=30&country=ru&media=music').then(mapItunes).catch(() => []));
     tasks.push(fetchJson('https://itunes.apple.com/search?term=' + encodeURIComponent(qq) + '&entity=song&limit=20&media=music').then(mapItunes).catch(() => []));
   });
+  // Yandex Music is queried through the optional MarshalX bridge.
+  // If the bridge is unavailable, the existing Deezer/iTunes search remains the fallback.
+  const yandexTask = yandexCall('search', { query: q }).catch(() => []);
   const batches = await Promise.all(tasks);
+  const yandexResults = await yandexTask;
   const seen = new Set();
   let results = [];
-  batches.forEach((list) => {
+  [yandexResults, ...batches].forEach((list) => {
     list.forEach((t) => {
       const key = (t.title + '|' + t.artist).toLowerCase();
       if (seen.has(key)) return;
@@ -276,48 +348,6 @@ function decodeBufferJson(buf) {
   } catch (_) {}
   return null;
 }
-function audioType(filePath) {
-  const ext = path.extname(filePath).toLowerCase();
-  return ({'.mp3':'audio/mpeg','.m4a':'audio/mp4','.aac':'audio/aac','.ogg':'audio/ogg','.wav':'audio/wav','.webm':'audio/webm','.flac':'audio/flac'})[ext] || 'application/octet-stream';
-}
-
-function scanMusicDir(dir = MUSIC_DIR, prefix = '') {
-  if (!fs.existsSync(dir)) return [];
-  const out = [];
-  for (const name of fs.readdirSync(dir, {withFileTypes:true})) {
-    const full = path.join(dir, name.name);
-    const rel = prefix ? path.join(prefix, name.name) : name.name;
-    if (name.isDirectory()) out.push(...scanMusicDir(full, rel));
-    else if (/\.(mp3|m4a|aac|ogg|wav|webm|flac)$/i.test(name.name)) {
-      const base = name.name.replace(/\.[^.]+$/, '');
-      const parts = base.split(/\s+-\s+/, 2);
-      out.push({ id:'local_' + crypto.createHash('sha1').update(rel).digest('hex').slice(0,12), title: parts.length>1 ? parts[1] : base, artist: parts.length>1 ? parts[0] : 'Local', file:'/music/' + rel.split(path.sep).map(encodeURIComponent).join('/'), duration:0, source:'local' });
-    }
-  }
-  return out;
-}
-
-function recommendationScore(seed, candidate, historyKeys) {
-  const n = s => String(s||'').toLowerCase();
-  const a=n(seed.artist), ca=n(candidate.artist), t=n(seed.title), ct=n(candidate.title);
-  let score = 0;
-  if (a && ca===a) score += 40;
-  if (a && (ca.includes(a)||a.includes(ca))) score += 18;
-  const artistWords = a.split(/\s+/).filter(x=>x.length>2);
-  artistWords.forEach(w=>{ if(ca.includes(w)) score+=8; });
-  if (historyKeys.has(n(candidate.title)+'|'+ca)) score -= 12;
-  if (ct===t) score -= 100;
-  return score + Math.random()*3;
-}
-
-function buildWave(seed) {
-  const local = scanMusicDir();
-  const catalog = local.length ? local : [];
-  const historyKeys = new Set((state.history||[]).filter(h=>h.type==='played').map(h=>nkey(h.title,h.artist)));
-  return catalog.sort((a,b)=>recommendationScore(seed,b,historyKeys)-recommendationScore(seed,a,historyKeys)).slice(0,20);
-}
-function nkey(title,artist){ return String(title||'').toLowerCase()+'|'+String(artist||'').toLowerCase(); }
-
 function contentType(filePath) {
   const ext = path.extname(filePath);
   return ({
@@ -379,6 +409,38 @@ const server = http.createServer(async (req, res) => {
   }
 
   // search — stricter rate
+
+  if (u.pathname === '/api/yandex/status' && req.method === 'GET') {
+    try {
+      const status = await yandexCall('status', {}, 5000);
+      return send(res, 200, status);
+    } catch (e) {
+      return send(res, 200, { installed: false, authenticated: !!process.env.YANDEX_MUSIC_TOKEN, error: String(e.message || e) });
+    }
+  }
+
+  if (u.pathname === '/api/yandex/search' && req.method === 'GET') {
+    if (!rateLimit(ip + ':yandex', 30, 60000)) return send(res, 429, { error: 'Yandex search: лимит. Подожди.' });
+    const q = (u.searchParams.get('q') || '').trim().slice(0, 80);
+    if (!q) return send(res, 200, { results: [] });
+    try {
+      return send(res, 200, { results: await yandexCall('search', { query: q }), q, source: 'yandex' });
+    } catch (e) {
+      return send(res, 503, { error: String(e.message || e), source: 'yandex' });
+    }
+  }
+
+  if (u.pathname === '/api/yandex/similar' && req.method === 'GET') {
+    if (!rateLimit(ip + ':yandex-similar', 20, 60000)) return send(res, 429, { error: 'Yandex similar: лимит. Подожди.' });
+    const id = (u.searchParams.get('id') || '').trim().slice(0, 100);
+    if (!id) return send(res, 400, { error: 'Нужен id трека' });
+    try {
+      return send(res, 200, { results: await yandexCall('similar', { yandexId: id }), source: 'yandex' });
+    } catch (e) {
+      return send(res, 503, { error: String(e.message || e), source: 'yandex' });
+    }
+  }
+
   if (u.pathname === '/api/search') {
     if (!rateLimit(ip + ':search', 40, 60000)) {
       return send(res, 429, { error: 'Поиск: лимит. Подожди.' });
@@ -483,62 +545,6 @@ const server = http.createServer(async (req, res) => {
     } catch (e) {
       return send(res, 400, { error: String(e.message || e) });
     }
-  }
-
-  if (u.pathname === '/api/library') {
-    if (!checkAdmin(req)) return send(res, 403, { error: 'Нужен PIN админа' });
-    return send(res, 200, { tracks: scanMusicDir(), count: scanMusicDir().length });
-  }
-
-  if (u.pathname === '/api/wave' && req.method === 'GET') {
-    const title = (u.searchParams.get('title') || '').trim();
-    const artist = (u.searchParams.get('artist') || '').trim();
-    if (!title && !artist) return send(res, 400, { error:'Нужен seed-трек' });
-    const tracks = buildWave({title, artist});
-    return send(res, 200, { seed:{title,artist}, tracks });
-  }
-
-  if (u.pathname === '/api/player' && req.method === 'GET') {
-    return send(res, 200, { nowPlaying: state.nowPlaying || null, queue: state.queue || [], mode: (state.settings && state.settings.playerMode) || 'queue' });
-  }
-
-  if (u.pathname === '/api/player' && req.method === 'POST') {
-    if (!checkAdmin(req)) return send(res, 403, { error: 'Нужен PIN админа' });
-    try {
-      const body = await readBody(req);
-      const action = body.action;
-      if (action === 'set') state.nowPlaying = body.track || null;
-      else if (action === 'clear') state.nowPlaying = null;
-      else if (action === 'next') {
-        const next = (state.queue||[]).shift() || null;
-        state.nowPlaying = next ? {...next, status:'playing', playedAt:Date.now()} : null;
-        if (next) { state.history = state.history || []; state.history.unshift({type:'played', orderId:next.id, title:next.title, artist:next.artist, at:Date.now()}); state.history=state.history.slice(0,300); }
-      } else if (action === 'enqueue') {
-        if (!body.track || !body.track.title) return send(res,400,{error:'Нет трека'});
-        state.queue = state.queue || []; state.queue.push({...body.track, id:body.track.id || ('auto_'+Date.now().toString(36)), source:body.track.source||'player'});
-      } else if (action === 'remove') {
-        state.queue = (state.queue||[]).filter(t=>t.id!==body.id);
-      } else if (action === 'mode') {
-        state.settings = state.settings || {}; state.settings.playerMode = ['queue','wave','party','chill'].includes(body.mode) ? body.mode : 'queue';
-      } else return send(res,400,{error:'Неизвестное действие'});
-      saveState();
-      return send(res,200,{ok:true, nowPlaying:state.nowPlaying, queue:state.queue, mode:state.settings.playerMode});
-    } catch(e) { return send(res,400,{error:String(e.message||e)}); }
-  }
-
-  // local audio with byte-range support
-  if (u.pathname.startsWith('/music/')) {
-    const rel = decodeURIComponent(u.pathname.slice('/music/'.length));
-    const file = path.normalize(path.join(MUSIC_DIR, rel));
-    if (!file.startsWith(MUSIC_DIR) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return send(res,404,'Not found','text/plain');
-    const stat=fs.statSync(file), size=stat.size, range=req.headers.range;
-    res.setHeader('Content-Type', audioType(file)); res.setHeader('Accept-Ranges','bytes'); res.setHeader('Cache-Control','no-store');
-    if (range) {
-      const m=/bytes=(\d*)-(\d*)/.exec(range); let start=m&&m[1]?Number(m[1]):0; let end=m&&m[2]?Number(m[2]):size-1;
-      if (end>=size) end=size-1; if(start>end || start>=size) return send(res,416,'Range Not Satisfiable','text/plain');
-      res.writeHead(206, {'Content-Range':`bytes ${start}-${end}/${size}`,'Content-Length':end-start+1}); fs.createReadStream(file,{start,end}).pipe(res);
-    } else { res.writeHead(200, {'Content-Length':size}); fs.createReadStream(file).pipe(res); }
-    return;
   }
 
   // static

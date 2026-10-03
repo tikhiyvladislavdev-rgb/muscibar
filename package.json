@@ -1,11 +1,12 @@
 {
   "name": "bar-music",
-  "version": "4.0.0",
-  "description": "Music bid system for bars — guest + admin + hall + Deezer search proxy",
+  "version": "6.1.0",
+  "description": "MUSCIBAR — guest + admin + hall + unified search + Yandex Music unofficial API bridge",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "setup:yandex": "python3 -m pip install -r requirements-yandex.txt"
   },
   "engines": {
     "node": ">=16"
