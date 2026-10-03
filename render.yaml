@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: muscibar
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: ADMIN_TOKEN
+        sync: false
+      - key: YANDEX_MUSIC_TOKEN
+        sync: false

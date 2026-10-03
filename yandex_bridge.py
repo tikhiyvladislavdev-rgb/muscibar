@@ -1,76 +1,92 @@
 #!/usr/bin/env python3
-"""Small JSONL bridge for MarshalX/yandex-music-api.
-The Node server talks to this process over stdin/stdout.
-"""
-import json, os, sys, traceback
+import json, os, sys
+from yandex_music import Client
 
-try:
-    from yandex_music import Client
-except Exception as exc:
-    print(json.dumps({"id": 0, "ok": False, "error": "yandex-music package is not installed: %s" % exc}, ensure_ascii=False), flush=True)
-    sys.exit(2)
+TOKEN = os.getenv('YANDEX_MUSIC_TOKEN', '').strip()
 
-TOKEN = os.getenv("YANDEX_MUSIC_TOKEN", "").strip()
-client = Client(TOKEN or None).init()
-
-def artist_names(track):
-    return [a.name for a in (getattr(track, "artists", None) or []) if getattr(a, "name", None)]
 
 def cover_url(track):
-    albums = getattr(track, "albums", None) or []
-    if not albums:
-        return ""
-    cover = getattr(albums[0], "cover_uri", "") or ""
-    if not cover:
-        return ""
-    if cover.startswith("http"):
-        return cover
-    return "https://" + cover.replace("%%", "300x300")
+    c = getattr(track, 'cover_uri', '') or ''
+    if c:
+        return 'https://' + c.replace('%%', '300x300')
+    return ''
 
-def map_track(track):
-    tid = str(getattr(track, "id", ""))
-    album_id = ""
-    albums = getattr(track, "albums", None) or []
-    if albums:
-        album_id = str(getattr(albums[0], "id", ""))
-    ym_id = tid + (":" + album_id if album_id else "")
+
+def map_track(t):
+    artists = getattr(t, 'artists', None) or []
+    artist = ', '.join((getattr(a, 'name', '') or '') for a in artists if getattr(a, 'name', None)) or 'Unknown'
+    duration = int((getattr(t, 'duration_ms', 0) or 0) / 1000)
+    tid = str(getattr(t, 'id', ''))
     return {
-        "id": "ym_" + ym_id.replace(":", "_"),
-        "yandexId": ym_id,
-        "title": getattr(track, "title", "") or "",
-        "artist": ", ".join(artist_names(track)) or "Unknown",
-        "cover": cover_url(track),
-        "duration": int(getattr(track, "duration_ms", 0) or 0) // 1000,
-        "explicit": bool(getattr(track, "content_warning", None)),
-        "source": "yandex",
-        "url": "https://music.yandex.ru/album/%s/track/%s" % (album_id, tid) if album_id and tid else ""
+        'id': 'ym_' + tid,
+        'yandexId': tid,
+        'title': getattr(t, 'title', '') or 'Unknown',
+        'artist': artist,
+        'cover': cover_url(t),
+        'duration': duration,
+        'preview': '',
+        'explicit': bool(getattr(t, 'explicit', False)),
+        'source': 'yandex',
+        'local': False,
     }
 
-def do(action, msg):
-    if action == "search":
-        r = client.search(msg.get("query", ""), type_="track", page=0, nocorrect=False)
-        tracks = getattr(getattr(r, "tracks", None), "results", None) or []
-        return [map_track(t) for t in tracks[:50]]
-    if action == "similar":
-        tid = msg.get("yandexId") or msg.get("trackId")
-        if not tid:
-            return []
-        r = client.tracks_similar(tid)
-        tracks = getattr(r, "similar_tracks", None) or []
-        return [map_track(t) for t in tracks[:30]]
-    if action == "track":
-        tid = msg.get("yandexId") or msg.get("trackId")
-        tracks = client.tracks([tid]) if tid else []
-        return map_track(tracks[0]) if tracks else None
-    if action == "status":
-        return {"installed": True, "authenticated": bool(TOKEN)}
-    raise ValueError("Unknown action: " + str(action))
 
-for line in sys.stdin:
+def client():
+    c = Client(TOKEN or None, language='ru_RU')
+    return c.init()
+
+
+def search(c, q):
+    result = c.search(q, type_='all', page=0)
+    out = []
+    tracks = getattr(getattr(result, 'tracks', None), 'results', None) or []
+    for t in tracks[:50]:
+        out.append(map_track(t))
+    return out
+
+
+def similar(c, track_id):
+    obj = c.tracks_similar(str(track_id))
+    out = []
+    for t in (getattr(obj, 'similar_tracks', None) or [])[:30]:
+        out.append(map_track(t))
+    return out
+
+
+def wave(c, seed, queue=None):
+    seeds = seed if isinstance(seed, list) else [seed]
+    session = c.rotor_session_new(seeds, queue=queue or [], include_tracks_in_response=True, interactive=True)
+    out = []
+    for t in (getattr(session, 'sequence', None) or []):
+        track = getattr(t, 'track', None)
+        if track:
+            out.append(map_track(track))
+    return out
+
+
+def main():
     try:
-        msg = json.loads(line)
-        rid = msg.get("id")
-        data = do(msg.get("action"), msg)
-        print(json.dumps({"id": rid, "ok": True, "data": data}, ensure_ascii=False), flush=True)
-    except Exception as exc:
-        print(json.dumps({"id": msg.get("id") if 'msg' in locals() else 0, "ok": False, "error": str(exc)}, ensure_ascii=False), flush=True)
+        req = json.loads(sys.stdin.read() or '{}')
+        action = req.get('action')
+        if not TOKEN:
+            raise RuntimeError('YANDEX_MUSIC_TOKEN is not set')
+        c = client()
+        if action == 'search':
+            data = search(c, str(req.get('q', '')).strip()[:100])
+        elif action == 'similar':
+            data = similar(c, req.get('track_id'))
+        elif action == 'wave':
+            data = wave(c, req.get('seed', 'user:onyourwave'), req.get('queue') or [])
+        elif action == 'status':
+            me = getattr(c, 'me', None)
+            account = getattr(me, 'account', None)
+            data = {'ok': True, 'login': getattr(account, 'login', None), 'uid': getattr(account, 'uid', None)}
+        else:
+            raise RuntimeError('Unknown action')
+        print(json.dumps({'ok': True, 'data': data}, ensure_ascii=False))
+    except Exception as e:
+        print(json.dumps({'ok': False, 'error': str(e)}, ensure_ascii=False))
+        sys.exit(0)
+
+if __name__ == '__main__':
+    main()

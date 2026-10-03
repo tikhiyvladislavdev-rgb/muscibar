@@ -1,7 +1,7 @@
 {
   "name": "bar-music",
-  "version": "6.1.0",
-  "description": "MUSCIBAR — guest + admin + hall + unified search + Yandex Music unofficial API bridge",
+  "version": "6.0.0",
+  "description": "MUSCIBAR v6 — guest music ordering, DJ player, Yandex Music search/Wave, Deezer/iTunes fallback",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

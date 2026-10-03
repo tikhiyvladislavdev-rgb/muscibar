@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
 const crypto = require('crypto');
-const { spawn } = require('child_process');
+const { execFile } = require('child_process');
 
 const PORT = process.env.PORT || 8787;
 const ROOT = __dirname;
@@ -16,74 +16,6 @@ const GITHUB_RAW = process.env.GITHUB_RAW ||
 const STATE_FILE = path.join(ROOT, 'data-state.json');
 const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_URL || '';
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || ''; // optional extra secret
-
-
-// ---------- Yandex Music unofficial API bridge ----------
-// Uses the popular MarshalX/yandex-music-api Python library when installed.
-// The bridge is optional: MUSCIBAR keeps working with Deezer/iTunes if Python
-// or the package is unavailable. Set YANDEX_MUSIC_TOKEN for authenticated API.
-let yandexBridge = null;
-let yandexSeq = 0;
-const yandexPending = new Map();
-let yandexBuffer = '';
-
-function startYandexBridge() {
-  if (yandexBridge) return;
-  const script = path.join(ROOT, 'yandex_bridge.py');
-  if (!fs.existsSync(script)) return;
-  const python = process.env.PYTHON_BIN || (process.platform === 'win32' ? 'python' : 'python3');
-  try {
-    yandexBridge = spawn(python, [script], {
-      cwd: ROOT,
-      env: { ...process.env },
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
-    yandexBridge.stdout.on('data', chunk => {
-      yandexBuffer += chunk.toString('utf8');
-      let idx;
-      while ((idx = yandexBuffer.indexOf('\n')) >= 0) {
-        const line = yandexBuffer.slice(0, idx).trim();
-        yandexBuffer = yandexBuffer.slice(idx + 1);
-        if (!line) continue;
-        try {
-          const msg = JSON.parse(line);
-          const pending = yandexPending.get(msg.id);
-          if (!pending) continue;
-          yandexPending.delete(msg.id);
-          if (msg.ok) pending.resolve(msg.data);
-          else pending.reject(new Error(msg.error || 'Yandex API error'));
-        } catch (_) {}
-      }
-    });
-    yandexBridge.stderr.on('data', chunk => console.warn('[Yandex]', chunk.toString().trim()));
-    yandexBridge.on('exit', () => {
-      for (const [, p] of yandexPending) p.reject(new Error('Yandex bridge stopped'));
-      yandexPending.clear();
-      yandexBridge = null;
-      yandexBuffer = '';
-    });
-    yandexBridge.on('error', () => { yandexBridge = null; });
-  } catch (_) { yandexBridge = null; }
-}
-
-function yandexCall(action, payload = {}, timeoutMs = 15000) {
-  startYandexBridge();
-  if (!yandexBridge || !yandexBridge.stdin.writable) {
-    return Promise.reject(new Error('Yandex API bridge is not installed. Run: pip install -r requirements-yandex.txt'));
-  }
-  const id = ++yandexSeq;
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      yandexPending.delete(id);
-      reject(new Error('Yandex API timeout'));
-    }, timeoutMs);
-    yandexPending.set(id, {
-      resolve: data => { clearTimeout(timer); resolve(data); },
-      reject: err => { clearTimeout(timer); reject(err); }
-    });
-    yandexBridge.stdin.write(JSON.stringify({ id, action, ...payload }) + '\n');
-  });
-}
 
 // ---------- state ----------
 let state = {
@@ -272,6 +204,40 @@ function mapDeezer(data) {
   }));
 }
 
+
+function yandexBridge(action, payload = {}) {
+  return new Promise((resolve) => {
+    if (!process.env.YANDEX_MUSIC_TOKEN) return resolve({ ok: false, error: 'YANDEX_MUSIC_TOKEN is not set' });
+    const script = path.join(ROOT, 'yandex_bridge.py');
+    const input = JSON.stringify({ action, ...payload });
+    execFile(process.env.PYTHON_BIN || 'python3', [script], {
+      cwd: ROOT,
+      timeout: 20000,
+      maxBuffer: 2 * 1024 * 1024,
+      env: process.env
+    }, (err, stdout) => {
+      if (err) return resolve({ ok: false, error: err.message });
+      try { return resolve(JSON.parse(stdout || '{}')); }
+      catch (e) { return resolve({ ok: false, error: 'Yandex bridge returned invalid JSON' }); }
+    }).stdin.end(input);
+  });
+}
+
+function mapYandexResults(list) {
+  return (Array.isArray(list) ? list : []).filter(t => t && t.title && t.artist).map(t => ({
+    id: t.id || ('ym_' + t.yandexId),
+    yandexId: t.yandexId || String(t.id || '').replace(/^ym_/, ''),
+    title: t.title,
+    artist: t.artist,
+    cover: t.cover || '',
+    duration: Number(t.duration || 0),
+    preview: t.preview || '',
+    explicit: !!t.explicit,
+    source: 'yandex',
+    local: false
+  }));
+}
+
 function mapItunes(data) {
   return (data.results || []).filter((t) => t.trackName).map((t) => ({
     id: 'it_' + t.trackId,
@@ -314,18 +280,15 @@ async function unifiedSearch(q) {
   const unique = [...new Set(queries)].slice(0, 3);
   const tasks = [];
   unique.forEach((qq) => {
+    tasks.push(yandexBridge('search', { q: qq }).then(r => r.ok ? mapYandexResults(r.data) : []).catch(() => []));
     tasks.push(fetchJson('https://api.deezer.com/search?q=' + encodeURIComponent(qq) + '&limit=40').then(mapDeezer).catch(() => []));
     tasks.push(fetchJson('https://itunes.apple.com/search?term=' + encodeURIComponent(qq) + '&entity=song&limit=30&country=ru&media=music').then(mapItunes).catch(() => []));
     tasks.push(fetchJson('https://itunes.apple.com/search?term=' + encodeURIComponent(qq) + '&entity=song&limit=20&media=music').then(mapItunes).catch(() => []));
   });
-  // Yandex Music is queried through the optional MarshalX bridge.
-  // If the bridge is unavailable, the existing Deezer/iTunes search remains the fallback.
-  const yandexTask = yandexCall('search', { query: q }).catch(() => []);
   const batches = await Promise.all(tasks);
-  const yandexResults = await yandexTask;
   const seen = new Set();
   let results = [];
-  [yandexResults, ...batches].forEach((list) => {
+  batches.forEach((list) => {
     list.forEach((t) => {
       const key = (t.title + '|' + t.artist).toLowerCase();
       if (seen.has(key)) return;
@@ -362,6 +325,7 @@ function contentType(filePath) {
 async function readStatic(relPath) {
   let rel = relPath === '/' || relPath === '' ? '/index-v4.html' : relPath;
   if (rel === '/index.html') rel = '/index-v4.html';
+  if (rel === '/player') rel = '/player.html';
   if (rel === '/robots.txt') return Buffer.from('User-agent: *\nDisallow:\n');
   const localPath = path.normalize(path.join(ROOT, rel));
   if (!localPath.startsWith(ROOT)) throw new Error('Forbidden');
@@ -409,38 +373,6 @@ const server = http.createServer(async (req, res) => {
   }
 
   // search — stricter rate
-
-  if (u.pathname === '/api/yandex/status' && req.method === 'GET') {
-    try {
-      const status = await yandexCall('status', {}, 5000);
-      return send(res, 200, status);
-    } catch (e) {
-      return send(res, 200, { installed: false, authenticated: !!process.env.YANDEX_MUSIC_TOKEN, error: String(e.message || e) });
-    }
-  }
-
-  if (u.pathname === '/api/yandex/search' && req.method === 'GET') {
-    if (!rateLimit(ip + ':yandex', 30, 60000)) return send(res, 429, { error: 'Yandex search: лимит. Подожди.' });
-    const q = (u.searchParams.get('q') || '').trim().slice(0, 80);
-    if (!q) return send(res, 200, { results: [] });
-    try {
-      return send(res, 200, { results: await yandexCall('search', { query: q }), q, source: 'yandex' });
-    } catch (e) {
-      return send(res, 503, { error: String(e.message || e), source: 'yandex' });
-    }
-  }
-
-  if (u.pathname === '/api/yandex/similar' && req.method === 'GET') {
-    if (!rateLimit(ip + ':yandex-similar', 20, 60000)) return send(res, 429, { error: 'Yandex similar: лимит. Подожди.' });
-    const id = (u.searchParams.get('id') || '').trim().slice(0, 100);
-    if (!id) return send(res, 400, { error: 'Нужен id трека' });
-    try {
-      return send(res, 200, { results: await yandexCall('similar', { yandexId: id }), source: 'yandex' });
-    } catch (e) {
-      return send(res, 503, { error: String(e.message || e), source: 'yandex' });
-    }
-  }
-
   if (u.pathname === '/api/search') {
     if (!rateLimit(ip + ':search', 40, 60000)) {
       return send(res, 429, { error: 'Поиск: лимит. Подожди.' });
@@ -453,6 +385,34 @@ const server = http.createServer(async (req, res) => {
     } catch (e) {
       return send(res, 500, { error: String(e.message || e) });
     }
+  }
+
+
+  if (u.pathname === '/api/yandex/status' && req.method === 'GET') {
+    if (!process.env.YANDEX_MUSIC_TOKEN) return send(res, 200, { ok: false, configured: false });
+    const r = await yandexBridge('status');
+    return send(res, 200, { configured: true, ...r });
+  }
+
+  if (u.pathname === '/api/yandex/search' && req.method === 'GET') {
+    const q = (u.searchParams.get('q') || '').trim().slice(0, 100);
+    if (!q) return send(res, 200, { results: [] });
+    const r = await yandexBridge('search', { q });
+    return send(res, r.ok ? 200 : 503, r.ok ? { results: mapYandexResults(r.data), q } : { results: [], error: r.error });
+  }
+
+  if (u.pathname === '/api/yandex/similar' && req.method === 'GET') {
+    const trackId = (u.searchParams.get('trackId') || '').replace(/^ym_/, '').trim();
+    if (!trackId) return send(res, 400, { error: 'trackId required' });
+    const r = await yandexBridge('similar', { track_id: trackId });
+    return send(res, r.ok ? 200 : 503, r.ok ? { results: mapYandexResults(r.data) } : { results: [], error: r.error });
+  }
+
+  if (u.pathname === '/api/yandex/wave' && req.method === 'GET') {
+    const seed = (u.searchParams.get('seed') || 'user:onyourwave').trim().slice(0, 120);
+    const queue = (u.searchParams.get('queue') || '').split(',').map(x => x.trim()).filter(Boolean).slice(-30);
+    const r = await yandexBridge('wave', { seed, queue });
+    return send(res, r.ok ? 200 : 503, r.ok ? { results: mapYandexResults(r.data), seed } : { results: [], error: r.error });
   }
 
   if (u.pathname === '/api/state' && req.method === 'GET') {
