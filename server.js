@@ -278,9 +278,25 @@ async function unifiedSearch(q) {
     queries.push(parts[0]);
   }
   const unique = [...new Set(queries)].slice(0, 3);
+
+  // Yandex is the primary catalog. We wait for it first and only use
+  // Deezer/iTunes as a fallback when Yandex is unavailable or empty.
+  const yandexLists = await Promise.all(unique.map((qq) =>
+    yandexBridge('search', { q: qq }).then(r => r.ok ? mapYandexResults(r.data) : []).catch(() => [])
+  ));
+  const ySeen = new Set();
+  const yandexResults = [];
+  yandexLists.flat().forEach((t) => {
+    const key = (t.title + '|' + t.artist).toLowerCase();
+    if (ySeen.has(key) || isStopped(t.title, t.artist)) return;
+    ySeen.add(key);
+    yandexResults.push(t);
+  });
+  yandexResults.sort((a, b) => scoreTrack(q, b) - scoreTrack(q, a));
+  if (yandexResults.length) return yandexResults.slice(0, 50);
+
   const tasks = [];
   unique.forEach((qq) => {
-    tasks.push(yandexBridge('search', { q: qq }).then(r => r.ok ? mapYandexResults(r.data) : []).catch(() => []));
     tasks.push(fetchJson('https://api.deezer.com/search?q=' + encodeURIComponent(qq) + '&limit=40').then(mapDeezer).catch(() => []));
     tasks.push(fetchJson('https://itunes.apple.com/search?term=' + encodeURIComponent(qq) + '&entity=song&limit=30&country=ru&media=music').then(mapItunes).catch(() => []));
     tasks.push(fetchJson('https://itunes.apple.com/search?term=' + encodeURIComponent(qq) + '&entity=song&limit=20&media=music').then(mapItunes).catch(() => []));
@@ -413,6 +429,25 @@ const server = http.createServer(async (req, res) => {
     const queue = (u.searchParams.get('queue') || '').split(',').map(x => x.trim()).filter(Boolean).slice(-30);
     const r = await yandexBridge('wave', { seed, queue });
     return send(res, r.ok ? 200 : 503, r.ok ? { results: mapYandexResults(r.data), seed } : { results: [], error: r.error });
+  }
+
+  if (u.pathname === '/api/yandex/device' && req.method === 'GET') {
+    const r = await yandexBridge('ynison_state');
+    return send(res, r.ok ? 200 : 503, r.ok ? r.data : { ok: false, error: r.error });
+  }
+
+  if (u.pathname === '/api/yandex/control' && req.method === 'POST') {
+    if (!checkAdmin(req)) return send(res, 403, { ok: false, error: 'Нужен PIN админа' });
+    try {
+      const body = await readBody(req);
+      const action = String(body.action || '').trim();
+      const allowed = ['pause', 'resume', 'next', 'previous', 'volume'];
+      if (!allowed.includes(action)) return send(res, 400, { ok: false, error: 'Неизвестная команда' });
+      const r = await yandexBridge('ynison_control', { action, volume: body.volume });
+      return send(res, r.ok ? 200 : 503, r.ok ? r.data : { ok: false, error: r.error });
+    } catch (e) {
+      return send(res, 400, { ok: false, error: String(e.message || e) });
+    }
   }
 
   if (u.pathname === '/api/state' && req.method === 'GET') {

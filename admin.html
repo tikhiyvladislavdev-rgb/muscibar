@@ -192,6 +192,7 @@
       <button class="nav-btn" data-tab="stoplist">Стоп-лист</button>
       <button class="nav-btn" data-tab="stats">Аналитика</button>
       <button class="nav-btn" data-tab="settings">Настройки</button>
+      <button class="nav-btn" data-tab="dj">🎵 DJ / Яндекс</button>
       <div class="side-foot">
         <a href="index.html" target="_blank">← Гостевая страница</a>
       </div>
@@ -218,6 +219,41 @@
         <div class="panel">
           <h2>В очереди <span class="cnt" id="queueCnt">0</span></h2>
           <div id="queueList"><div class="empty">Очередь пуста</div></div>
+        </div>
+      </div>
+
+      <!-- DJ / YANDEX -->
+      <div class="tabs" id="tab-dj">
+        <h1>DJ / Яндекс Музыка</h1>
+        <p class="sub">Поиск гостей теперь идёт через Яндекс. Здесь — управление DJ-плеером и активным устройством Яндекс Музыки.</p>
+        <div class="panel">
+          <h2>Быстрые действия</h2>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-accent" id="openDjBtn">🎵 Открыть DJ</button>
+            <button class="btn btn-accent" id="waveBtn">🌊 Включить Моя волна</button>
+          </div>
+          <div id="djHint" style="color:var(--muted);font-size:12px;margin-top:12px">Проверяем активное устройство…</div>
+        </div>
+        <div class="panel">
+          <h2>Активное устройство Яндекс</h2>
+          <div id="yandexDevice" class="empty" style="padding:18px">Нет данных</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+            <button class="btn btn-ghost btn-sm" data-ym-action="pause">⏸ Пауза</button>
+            <button class="btn btn-ghost btn-sm" data-ym-action="resume">▶ Продолжить</button>
+            <button class="btn btn-ghost btn-sm" data-ym-action="previous">⏮ Предыдущий</button>
+            <button class="btn btn-ghost btn-sm" data-ym-action="next">⏭ Следующий</button>
+            <button class="btn btn-ghost btn-sm" id="refreshYandexDevice">↻ Обновить</button>
+          </div>
+          <div style="margin-top:14px">
+            <label style="display:block;color:var(--muted);font-size:12px;margin-bottom:6px">Громкость</label>
+            <input id="ymVolume" type="range" min="0" max="100" value="70" style="width:100%">
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Важно</h2>
+          <div style="color:var(--muted);font-size:13px;line-height:1.55">
+            Кнопки управления работают как пульт для активного устройства Яндекс Музыки. Сам Render-сайт не становится лицензированным браузерным аудиоплеером: для полного воспроизведения на площадке используйте активное устройство/официальный клиент Яндекс Музыки.
+          </div>
         </div>
       </div>
 
@@ -557,6 +593,39 @@
       refresh();
     };
 
+
+    // Yandex / DJ controls
+    function adminPinHeader() {
+      const s = getSettings();
+      return { 'Content-Type': 'application/json', 'X-Admin-Pin': String(s.adminPin || '1234') };
+    }
+    async function yandexDeviceState() {
+      const r = await fetch('/api/yandex/device', { cache: 'no-store' });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Яндекс-устройство недоступно');
+      const box = document.getElementById('yandexDevice');
+      const cur = d.current;
+      box.innerHTML = d.activeDevice
+        ? `<strong>${esc(d.activeDevice)}</strong><div style="color:var(--muted);margin-top:5px">${cur ? esc(cur.title) : 'ничего не играет'}</div>`
+        : 'Нет активного устройства. Открой Яндекс Музыку на устройстве, которое должно играть.';
+      document.getElementById('djHint').textContent = d.activeDevice ? 'Активное устройство найдено' : 'Активное устройство не найдено';
+      return d;
+    }
+    async function yandexControl(action, volume) {
+      const r = await fetch('/api/yandex/control', { method:'POST', headers:adminPinHeader(), body:JSON.stringify({ action, volume }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Команда не выполнена');
+      await yandexDeviceState();
+      toast('Команда отправлена');
+    }
+    document.getElementById('openDjBtn').onclick = () => window.open('/player', '_blank');
+    document.getElementById('waveBtn').onclick = () => window.open('/player?mode=wave', '_blank');
+    document.getElementById('refreshYandexDevice').onclick = () => yandexDeviceState().catch(e => toast(e.message));
+    document.querySelectorAll('[data-ym-action]').forEach(btn => {
+      btn.onclick = () => yandexControl(btn.dataset.ymAction).catch(e => toast(e.message));
+    });
+    document.getElementById('ymVolume').onchange = e => yandexControl('volume', Number(e.target.value) / 100).catch(err => toast(err.message));
+    yandexDeviceState().catch(() => {});
 
     // PIN gate
     (function() {

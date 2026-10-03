@@ -63,6 +63,40 @@ def wave(c, seed, queue=None):
             out.append(map_track(track))
     return out
 
+def ynison_state(token):
+    from yandex_music.ynison import simple
+    state = simple.get_state(token)
+    active = simple.get_active_device(token)
+    current = simple.get_current_track(token)
+    return {
+        'ok': True,
+        'activeDevice': getattr(getattr(active, 'info', None), 'title', None) if active else None,
+        'activeDeviceId': getattr(active, 'device_id', None) if active else None,
+        'current': {
+            'id': getattr(current, 'playable_id', None),
+            'title': getattr(current, 'title', None),
+            'duration': int((getattr(current, 'duration_ms', 0) or 0) / 1000),
+        } if current else None,
+        'devices': [
+            {
+                'id': getattr(d, 'device_id', None),
+                'title': getattr(getattr(d, 'info', None), 'title', None),
+                'active': bool(active and getattr(d, 'device_id', None) == getattr(active, 'device_id', None)),
+            }
+            for d in (getattr(state, 'devices', None) or [])
+        ],
+    }
+
+def ynison_control(token, action, volume=None):
+    from yandex_music.ynison import simple
+    if action == 'pause': simple.pause(token)
+    elif action == 'resume': simple.resume(token)
+    elif action == 'next': simple.next_track(token)
+    elif action == 'previous': simple.previous_track(token)
+    elif action == 'volume': simple.set_volume(token, float(volume))
+    else: raise RuntimeError('Unknown Ynison action')
+    return ynison_state(token)
+
 
 def main():
     try:
@@ -77,6 +111,10 @@ def main():
             data = similar(c, req.get('track_id'))
         elif action == 'wave':
             data = wave(c, req.get('seed', 'user:onyourwave'), req.get('queue') or [])
+        elif action == 'ynison_state':
+            data = ynison_state(TOKEN)
+        elif action == 'ynison_control':
+            data = ynison_control(TOKEN, str(req.get('action', '')), req.get('volume'))
         elif action == 'status':
             me = getattr(c, 'me', None)
             account = getattr(me, 'account', None)

@@ -802,19 +802,16 @@
         return;
       }
 
-      // 1) Instant fuzzy local (drunk-proof)
+      // Yandex is the primary search source. Do not show local/iTunes hits
+      // before Yandex has had a chance to answer. This keeps the guest UI
+      // centered on the real Yandex catalog.
       const local = localSearch(query);
-      results = local;
+      results = [];
       document.body.classList.add('searching');
-      if (results.length) {
-        $('#resTitle').textContent = `Найдено: ${results.length}`;
-        renderResults();
-      } else {
-        $('#results').innerHTML = Array(3).fill(0).map(() => `<div class="sk"><div class="sk-c"></div><div style="flex:1"><div class="sk-l"></div><div class="sk-l" style="width:40%"></div></div></div>`).join('');
-        $('#resTitle').textContent = 'Ищем...';
-      }
+      $('#results').innerHTML = Array(3).fill(0).map(() => `<div class="sk"><div class="sk-c"></div><div style="flex:1"><div class="sk-l"></div><div class="sk-l" style="width:40%"></div></div></div>`).join('');
+      $('#resTitle').textContent = 'Ищем в Яндекс Музыке...';
 
-      // 2) Parallel iTunes: as-is + translit + first 2 tokens
+      // 2) Fallback sources are used only when Yandex has no result.
       const qLat = translit(query);
       const toks = tokens(query);
       const queries = [query];
@@ -840,18 +837,34 @@
       }
 
       const uniqueQ = [...new Set(queries)].slice(0, 4);
-      uniqueQ.forEach(qq => {
-        pending++;
-        const term = encodeURIComponent(qq);
-        runJsonp(`term=${term}&entity=song&limit=25&media=music&country=ru&lang=ru_ru`, d => {
-          merge(mapItunes(d));
-          pending--;
-        }, () => { pending--; });
-      });
 
-      // Deezer via mini-backend if available
+      // Primary backend: Yandex first. If it returns results, use only those.
       searchViaApi(query).then(list => {
-        if (list.length) merge(list);
+        if (list.length) {
+          results = list;
+          results.sort((a, b) => scoreTrack(query, b) - scoreTrack(query, a));
+          $('#resTitle').textContent = `Яндекс Музыка · ${results.length}`;
+          renderResults();
+          return;
+        }
+
+        // No Yandex results — fallback to local catalog + iTunes/Deezer.
+        results = local.slice();
+        const ids = new Set(results.map(r => r.id));
+        const titles = new Set(results.map(r => norm(r.title) + '|' + norm(r.artist)));
+        const fallbackMerge = (list) => {
+          for (const t of list) {
+            const k = norm(t.title) + '|' + norm(t.artist);
+            if (ids.has(t.id) || titles.has(k)) continue;
+            ids.add(t.id); titles.add(k); results.push(t);
+          }
+          results.sort((a, b) => scoreTrack(query, b) - scoreTrack(query, a));
+          $('#resTitle').textContent = results.length ? `Найдено: ${results.length}` : 'Ничего не найдено';
+          renderResults();
+        };
+        uniqueQ.forEach(qq => {
+          runJsonp(`term=${encodeURIComponent(qq)}&entity=song&limit=25&media=music&country=ru&lang=ru_ru`, d => fallbackMerge(mapItunes(d)), () => {});
+        });
       });
     }
 
