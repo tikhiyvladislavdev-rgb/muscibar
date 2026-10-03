@@ -196,6 +196,14 @@ function pushHistory(entry) {
 
 /** Create order → goes to pending for DJ */
 function createOrder(track, bid, guestId) {
+  const min = (getSettings().minBid != null) ? Number(getSettings().minBid) : 100;
+  bid = Number(bid);
+  if (!Number.isFinite(bid) || bid < min) {
+    return { ok: false, error: 'Минимальная ставка ' + min + ' ₽' };
+  }
+  if (bid > 500000) {
+    return { ok: false, error: 'Слишком большая сумма' };
+  }
   if (isStopped(track.title, track.artist)) {
     return { ok: false, error: 'Этот трек в стоп-листе' };
   }
@@ -633,3 +641,10 @@ if (_remoteEnabled && typeof setInterval !== 'undefined') {
 
 console.log('Bar Music shared.js remote:', _remoteEnabled ? REMOTE_STATE_URL : 'off');
 
+
+// client keep-alive — tabs ping /health so Render stays awake
+if (typeof location !== 'undefined' && location.hostname && location.hostname.indexOf('onrender.com') >= 0) {
+  setInterval(function () {
+    fetch(location.origin + '/health', { cache: 'no-store' }).catch(function () {});
+  }, 8 * 60 * 1000);
+}

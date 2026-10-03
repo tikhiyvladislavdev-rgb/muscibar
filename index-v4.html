@@ -1108,14 +1108,36 @@
         };
       } else {
         btn.onclick = () => {
+          const min = Number(getSettings().minBid) || 100;
+          let v = Number(btn.dataset.v);
+          if (v < min) { toast('Минимум ' + min + ' ₽'); v = min; }
           $$('.preset:not(.raise-p)').forEach(p => p.classList.remove('active'));
           btn.classList.add('active');
-          $('#bidAmount').value = btn.dataset.v;
+          $('#bidAmount').value = v;
         };
       }
     });
 
     $('#previewBtn').onclick = () => { if (selected) togglePreview(selected); };
+    
+    // enforce min bid on input
+    const bidInputEl = $('#bidAmount');
+    if (bidInputEl) {
+      bidInputEl.addEventListener('change', () => {
+        const min = Number(getSettings().minBid) || 100;
+        let v = parseInt(bidInputEl.value, 10);
+        if (isNaN(v) || v < min) bidInputEl.value = min;
+      });
+      bidInputEl.addEventListener('blur', () => {
+        const min = Number(getSettings().minBid) || 100;
+        let v = parseInt(bidInputEl.value, 10);
+        if (isNaN(v) || v < min) {
+          bidInputEl.value = min;
+          toast('Минимум ' + min + ' ₽');
+        }
+      });
+    }
+
     $('#toPay').onclick = () => {
       const min = getSettings().minBid;
       const amount = parseInt($('#bidAmount').value, 10);

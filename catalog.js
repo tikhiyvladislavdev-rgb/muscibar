@@ -204,6 +204,21 @@ window.MUSIC_CATALOG = [
   { title: "Прекрасное далёко", artist: "из к/ф Гостья из будущего", tags: "прекрасное далеко" },
   { title: "До свидания, Москва", artist: "из к/ф", tags: "до свидания москва" },
   { title: "Medley Russian Hits", artist: "DJ Mix", tags: "русский микс" }
+
+  { title: "Рюмка водки на столе", artist: "Григорий Лепс", tags: "лепс рюмка водки на столе grigory leps riumka" },
+  { title: "Натали", artist: "Григорий Лепс", tags: "лепс натали natali" },
+  { title: "Я поднимаю свой бокал", artist: "Григорий Лепс", tags: "лепс бокал поднимаю" },
+  { title: "London", artist: "Григорий Лепс & Тимати", tags: "лепс тимати лондон london" },
+  { title: "Слово пацана", artist: "Oxxxymiron", tags: "оксимирон oxxxymiron пацан" },
+  { title: "Город под подошвой", artist: "Oxxxymiron", tags: "оксимирон" },
+  { title: "Не могу", artist: "Клава Кока", tags: "клава кока" },
+  { title: "Покинула чат", artist: "Клава Кока", tags: "клава кока чат" },
+  { title: "Пятница", artist: "Клава Кока", tags: "клава" },
+  { title: "Цветная", artist: "Егор Крид", tags: "крид" },
+  { title: "Будильник", artist: "Егор Крид", tags: "крид будильник" },
+  { title: "3-е сентября", artist: "Михаил Шуфутинский", tags: "шуфутинский сентября 3" },
+  { title: "Чистые пруды", artist: "Игорь Тальков", tags: "тальков пруды" },
+  { title: "Владимирский централ", artist: "Михаил Круг", tags: "круг централ шансон" },
 ].map((t, i) => ({
   id: 'C' + i,
   title: t.title,
