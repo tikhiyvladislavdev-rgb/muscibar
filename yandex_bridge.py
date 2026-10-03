@@ -67,28 +67,33 @@ def wave(c, seed, queue=None):
     return out
 
 def ynison_state(token):
-    from yandex_music.ynison import simple
-    state = simple.get_state(token)
-    active = simple.get_active_device(token)
-    current = simple.get_current_track(token)
-    return {
-        'ok': True,
-        'activeDevice': getattr(getattr(active, 'info', None), 'title', None) if active else None,
-        'activeDeviceId': getattr(active, 'device_id', None) if active else None,
-        'current': {
-            'id': getattr(current, 'playable_id', None),
-            'title': getattr(current, 'title', None),
-            'duration': int((getattr(current, 'duration_ms', 0) or 0) / 1000),
-        } if current else None,
-        'devices': [
-            {
-                'id': getattr(d, 'device_id', None),
-                'title': getattr(getattr(d, 'info', None), 'title', None),
-                'active': bool(active and getattr(d, 'device_id', None) == getattr(active, 'device_id', None)),
-            }
-            for d in (getattr(state, 'devices', None) or [])
-        ],
-    }
+    """Read the live Ynison state through the same websocket mechanism used by the remote control."""
+    from yandex_music.ynison import YnisonClient
+
+    with YnisonClient(token, device_title='MUSCIBAR DJ').session(timeout=12.0) as yc:
+        active = yc.active_device
+        current = yc.current_playable
+        state = yc.latest_state or yc.state
+        devices = getattr(state, 'devices', None) or []
+        return {
+            'ok': True,
+            'activeDevice': getattr(getattr(active, 'info', None), 'title', None) if active else None,
+            'activeDeviceId': getattr(getattr(active, 'info', None), 'device_id', None) if active else None,
+            'current': {
+                'id': getattr(current, 'playable_id', None),
+                'title': getattr(current, 'title', None),
+                'duration': int((getattr(current, 'duration_ms', 0) or 0) / 1000),
+            } if current else None,
+            'devices': [
+                {
+                    'id': getattr(getattr(d, 'info', None), 'device_id', None),
+                    'title': getattr(getattr(d, 'info', None), 'title', None),
+                    'active': bool(active and getattr(getattr(d, 'info', None), 'device_id', None) == getattr(getattr(active, 'info', None), 'device_id', None)),
+                    'canBePlayer': bool(getattr(getattr(d, 'capabilities', None), 'can_be_player', False)),
+                }
+                for d in devices
+            ],
+        }
 
 
 def ynison_enqueue_next(token, track_id, title='', artist='', cover='', album_id=None):
@@ -200,14 +205,41 @@ def ynison_enqueue_next(token, track_id, title='', artist='', cover='', album_id
         }
 
 def ynison_control(token, action, volume=None):
-    from yandex_music.ynison import simple
-    if action == 'pause': simple.pause(token)
-    elif action == 'resume': simple.resume(token)
-    elif action == 'next': simple.next_track(token)
-    elif action == 'previous': simple.previous_track(token)
-    elif action == 'volume': simple.set_volume(token, float(volume))
-    else: raise RuntimeError('Unknown Ynison action')
-    return ynison_state(token)
+    """Reliable remote control through one Ynison websocket session."""
+    from yandex_music.ynison import YnisonClient
+
+    with YnisonClient(token, device_title='MUSCIBAR DJ').session(timeout=12.0) as yc:
+        active = yc.active_device
+        if active is None:
+            raise RuntimeError('Нет активного устройства Yandex Music')
+        if action == 'pause':
+            yc.pause()
+        elif action == 'resume':
+            yc.resume()
+        elif action == 'next':
+            yc.next_track()
+        elif action == 'previous':
+            yc.previous_track()
+        elif action == 'volume':
+            yc.set_volume(float(volume))
+        else:
+            raise RuntimeError('Unknown Ynison action')
+        time.sleep(0.25)
+        latest = yc.latest_state
+        current = getattr(yc, 'current_playable', None)
+        status = getattr(getattr(latest, 'player_state', None), 'status', None) if latest else getattr(getattr(yc, 'state', None), 'player_state', None)
+        return {
+            'ok': True,
+            'activeDevice': getattr(getattr(active, 'info', None), 'title', None),
+            'activeDeviceId': getattr(getattr(active, 'info', None), 'device_id', None),
+            'current': {
+                'id': getattr(current, 'playable_id', None),
+                'title': getattr(current, 'title', None),
+                'duration': int((getattr(current, 'duration_ms', 0) or 0) / 1000),
+            } if current else None,
+            'paused': getattr(status, 'paused', None) if status else None,
+            'volume': getattr(active, 'volume', None),
+        }
 
 
 def main():

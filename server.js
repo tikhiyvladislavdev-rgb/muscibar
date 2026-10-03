@@ -317,7 +317,7 @@ async function unifiedSearch(q) {
       if (yandexResults.length) {
         // Preview enrichment is intentionally limited. It must never block
         // the actual Yandex search result from reaching the guest page.
-        return enrichYandexPreviews(yandexResults.slice(0, 20));
+        return yandexResults.slice(0, 50);
       }
     }
   } catch (_) {}
@@ -363,13 +363,20 @@ function decodeBufferJson(buf) {
   return null;
 }
 function contentType(filePath) {
-  const ext = path.extname(filePath);
+  const normalized = String(filePath || '').split('?')[0];
+  const ext = path.extname(normalized === '/player' ? '/player.html' : normalized);
   return ({
     '.html': 'text/html',
     '.js': 'application/javascript',
     '.css': 'text/css',
     '.json': 'application/json',
-    '.txt': 'text/plain'
+    '.txt': 'text/plain',
+    '.svg': 'image/svg+xml',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.webp': 'image/webp',
+    '.ico': 'image/x-icon'
   })[ext] || 'application/octet-stream';
 }
 
@@ -450,7 +457,7 @@ const server = http.createServer(async (req, res) => {
     if (!q) return send(res, 200, { results: [] });
     const r = await yandexBridge('search', { q });
     if (!r.ok) return send(res, 503, { results: [], error: r.error });
-    const results = await enrichYandexPreviews(mapYandexResults(r.data));
+    const results = mapYandexResults(r.data).filter(t => !isStopped(t.title, t.artist)).slice(0, 50);
     return send(res, 200, { results, q });
   }
 

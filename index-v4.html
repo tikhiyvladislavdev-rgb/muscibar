@@ -1160,7 +1160,7 @@
       $('#stepPay').style.display = 'block';
     };
     $('#backBid').onclick = () => { $('#stepPay').style.display = 'none'; $('#stepBid').style.display = 'block'; };
-    $('#fakePay').onclick = () => {
+    $('#fakePay').onclick = async () => {
       const amount = parseInt($('#bidAmount').value, 10);
       const res = createOrder(selected, amount, guestId);
       if (!res.ok) { toast(res.error); return; }

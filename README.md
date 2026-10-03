@@ -52,3 +52,12 @@ Yandex API здесь используется как каталог/поиск/
 Для работы нужен активный Yandex Music-плеер на устройстве бара под тем же аккаунтом, чей OAuth-токен указан в `YANDEX_MUSIC_TOKEN`. Если активного устройства нет или оно не принимает удалённое управление, заказ всё равно остаётся в серверной очереди MUSCIBAR и ошибка добавления фиксируется в истории.
 
 Это использует неофициальный `yandex-music-api`/Ynison; его очередь и remote-control являются reverse-engineered механизмами, а не официальным публичным SDK Yandex.
+
+
+## Production deployment
+
+This build is intended to run on Render as a Docker web service. It installs Node.js, Python and `yandex-music[ynison]==3.0.0` from the included Dockerfile. Set `YANDEX_MUSIC_TOKEN` in Render.
+
+The guest search uses Yandex as the primary catalog and returns Yandex results directly; preview enrichment is deliberately not on the critical search path. The `/player` and `/player?mode=wave` routes are served as HTML, not downloads.
+
+Accepted Yandex orders are mirrored into the active Ynison device queue as the next item. DJ controls use a persistent Ynison websocket session for pause, resume, next, previous and volume. The audio itself remains on the active Yandex Music device; Render is the control/server layer.
