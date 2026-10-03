@@ -99,7 +99,6 @@ def ynison_enqueue_next(token, track_id, title='', artist='', cover='', album_id
     """
     from yandex_music.ynison import YnisonClient
     from yandex_music.ynison.models import ynison_state as ys
-    from yandex_music.ynison import utils
 
     tid = str(track_id or '').replace('ym_', '').strip()
     if not tid:

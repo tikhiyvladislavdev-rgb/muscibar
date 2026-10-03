@@ -299,31 +299,37 @@ function scoreTrack(q, t) {
 }
 
 async function unifiedSearch(q) {
+  // Keep the primary search deliberately simple and reliable on Render:
+  // one Yandex request per user query. Multiple simultaneous Client.init()
+  // calls can be slow and can make the search look broken on a small server.
+  try {
+    const yr = await yandexBridge('search', { q });
+    if (yr.ok) {
+      const ySeen = new Set();
+      const yandexResults = [];
+      mapYandexResults(yr.data).forEach((t) => {
+        const key = (t.title + '|' + t.artist).toLowerCase();
+        if (ySeen.has(key) || isStopped(t.title, t.artist)) return;
+        ySeen.add(key);
+        yandexResults.push(t);
+      });
+      yandexResults.sort((a, b) => scoreTrack(q, b) - scoreTrack(q, a));
+      if (yandexResults.length) {
+        // Preview enrichment is intentionally limited. It must never block
+        // the actual Yandex search result from reaching the guest page.
+        return enrichYandexPreviews(yandexResults.slice(0, 20));
+      }
+    }
+  } catch (_) {}
+
+  // Fallback catalog if Yandex is temporarily unavailable.
   const queries = [q];
-  // split "artist track"
   const parts = q.trim().split(/\s+/);
   if (parts.length >= 2) {
     queries.push(parts.slice(0, 2).join(' '));
     queries.push(parts[0]);
   }
   const unique = [...new Set(queries)].slice(0, 3);
-
-  // Yandex is the primary catalog. We wait for it first and only use
-  // Deezer/iTunes as a fallback when Yandex is unavailable or empty.
-  const yandexLists = await Promise.all(unique.map((qq) =>
-    yandexBridge('search', { q: qq }).then(r => r.ok ? mapYandexResults(r.data) : []).catch(() => [])
-  ));
-  const ySeen = new Set();
-  const yandexResults = [];
-  yandexLists.flat().forEach((t) => {
-    const key = (t.title + '|' + t.artist).toLowerCase();
-    if (ySeen.has(key) || isStopped(t.title, t.artist)) return;
-    ySeen.add(key);
-    yandexResults.push(t);
-  });
-  yandexResults.sort((a, b) => scoreTrack(q, b) - scoreTrack(q, a));
-  if (yandexResults.length) return await enrichYandexPreviews(yandexResults.slice(0, 50));
-
   const tasks = [];
   unique.forEach((qq) => {
     tasks.push(fetchJson('https://api.deezer.com/search?q=' + encodeURIComponent(qq) + '&limit=40').then(mapDeezer).catch(() => []));
