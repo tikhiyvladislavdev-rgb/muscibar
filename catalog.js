@@ -203,7 +203,7 @@ window.MUSIC_CATALOG = [
   { title: "Крылатые качели", artist: "из к/ф Приключения Электроника", tags: "электроник качели" },
   { title: "Прекрасное далёко", artist: "из к/ф Гостья из будущего", tags: "прекрасное далеко" },
   { title: "До свидания, Москва", artist: "из к/ф", tags: "до свидания москва" },
-  { title: "Medley Russian Hits", artist: "DJ Mix", tags: "русский микс" }
+  { title: "Medley Russian Hits", artist: "DJ Mix", tags: "русский микс" },
 
   { title: "Рюмка водки на столе", artist: "Григорий Лепс", tags: "лепс рюмка водки на столе grigory leps riumka" },
   { title: "Натали", artist: "Григорий Лепс", tags: "лепс натали natali" },

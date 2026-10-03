@@ -15,6 +15,7 @@ const GITHUB_RAW = process.env.GITHUB_RAW ||
 const STATE_FILE = path.join(ROOT, 'data-state.json');
 const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_URL || '';
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || ''; // optional extra secret
+const MUSIC_DIR = path.join(ROOT, 'music');
 
 // ---------- state ----------
 let state = {
@@ -275,6 +276,48 @@ function decodeBufferJson(buf) {
   } catch (_) {}
   return null;
 }
+function audioType(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  return ({'.mp3':'audio/mpeg','.m4a':'audio/mp4','.aac':'audio/aac','.ogg':'audio/ogg','.wav':'audio/wav','.webm':'audio/webm','.flac':'audio/flac'})[ext] || 'application/octet-stream';
+}
+
+function scanMusicDir(dir = MUSIC_DIR, prefix = '') {
+  if (!fs.existsSync(dir)) return [];
+  const out = [];
+  for (const name of fs.readdirSync(dir, {withFileTypes:true})) {
+    const full = path.join(dir, name.name);
+    const rel = prefix ? path.join(prefix, name.name) : name.name;
+    if (name.isDirectory()) out.push(...scanMusicDir(full, rel));
+    else if (/\.(mp3|m4a|aac|ogg|wav|webm|flac)$/i.test(name.name)) {
+      const base = name.name.replace(/\.[^.]+$/, '');
+      const parts = base.split(/\s+-\s+/, 2);
+      out.push({ id:'local_' + crypto.createHash('sha1').update(rel).digest('hex').slice(0,12), title: parts.length>1 ? parts[1] : base, artist: parts.length>1 ? parts[0] : 'Local', file:'/music/' + rel.split(path.sep).map(encodeURIComponent).join('/'), duration:0, source:'local' });
+    }
+  }
+  return out;
+}
+
+function recommendationScore(seed, candidate, historyKeys) {
+  const n = s => String(s||'').toLowerCase();
+  const a=n(seed.artist), ca=n(candidate.artist), t=n(seed.title), ct=n(candidate.title);
+  let score = 0;
+  if (a && ca===a) score += 40;
+  if (a && (ca.includes(a)||a.includes(ca))) score += 18;
+  const artistWords = a.split(/\s+/).filter(x=>x.length>2);
+  artistWords.forEach(w=>{ if(ca.includes(w)) score+=8; });
+  if (historyKeys.has(n(candidate.title)+'|'+ca)) score -= 12;
+  if (ct===t) score -= 100;
+  return score + Math.random()*3;
+}
+
+function buildWave(seed) {
+  const local = scanMusicDir();
+  const catalog = local.length ? local : [];
+  const historyKeys = new Set((state.history||[]).filter(h=>h.type==='played').map(h=>nkey(h.title,h.artist)));
+  return catalog.sort((a,b)=>recommendationScore(seed,b,historyKeys)-recommendationScore(seed,a,historyKeys)).slice(0,20);
+}
+function nkey(title,artist){ return String(title||'').toLowerCase()+'|'+String(artist||'').toLowerCase(); }
+
 function contentType(filePath) {
   const ext = path.extname(filePath);
   return ({
@@ -440,6 +483,62 @@ const server = http.createServer(async (req, res) => {
     } catch (e) {
       return send(res, 400, { error: String(e.message || e) });
     }
+  }
+
+  if (u.pathname === '/api/library') {
+    if (!checkAdmin(req)) return send(res, 403, { error: 'Нужен PIN админа' });
+    return send(res, 200, { tracks: scanMusicDir(), count: scanMusicDir().length });
+  }
+
+  if (u.pathname === '/api/wave' && req.method === 'GET') {
+    const title = (u.searchParams.get('title') || '').trim();
+    const artist = (u.searchParams.get('artist') || '').trim();
+    if (!title && !artist) return send(res, 400, { error:'Нужен seed-трек' });
+    const tracks = buildWave({title, artist});
+    return send(res, 200, { seed:{title,artist}, tracks });
+  }
+
+  if (u.pathname === '/api/player' && req.method === 'GET') {
+    return send(res, 200, { nowPlaying: state.nowPlaying || null, queue: state.queue || [], mode: (state.settings && state.settings.playerMode) || 'queue' });
+  }
+
+  if (u.pathname === '/api/player' && req.method === 'POST') {
+    if (!checkAdmin(req)) return send(res, 403, { error: 'Нужен PIN админа' });
+    try {
+      const body = await readBody(req);
+      const action = body.action;
+      if (action === 'set') state.nowPlaying = body.track || null;
+      else if (action === 'clear') state.nowPlaying = null;
+      else if (action === 'next') {
+        const next = (state.queue||[]).shift() || null;
+        state.nowPlaying = next ? {...next, status:'playing', playedAt:Date.now()} : null;
+        if (next) { state.history = state.history || []; state.history.unshift({type:'played', orderId:next.id, title:next.title, artist:next.artist, at:Date.now()}); state.history=state.history.slice(0,300); }
+      } else if (action === 'enqueue') {
+        if (!body.track || !body.track.title) return send(res,400,{error:'Нет трека'});
+        state.queue = state.queue || []; state.queue.push({...body.track, id:body.track.id || ('auto_'+Date.now().toString(36)), source:body.track.source||'player'});
+      } else if (action === 'remove') {
+        state.queue = (state.queue||[]).filter(t=>t.id!==body.id);
+      } else if (action === 'mode') {
+        state.settings = state.settings || {}; state.settings.playerMode = ['queue','wave','party','chill'].includes(body.mode) ? body.mode : 'queue';
+      } else return send(res,400,{error:'Неизвестное действие'});
+      saveState();
+      return send(res,200,{ok:true, nowPlaying:state.nowPlaying, queue:state.queue, mode:state.settings.playerMode});
+    } catch(e) { return send(res,400,{error:String(e.message||e)}); }
+  }
+
+  // local audio with byte-range support
+  if (u.pathname.startsWith('/music/')) {
+    const rel = decodeURIComponent(u.pathname.slice('/music/'.length));
+    const file = path.normalize(path.join(MUSIC_DIR, rel));
+    if (!file.startsWith(MUSIC_DIR) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return send(res,404,'Not found','text/plain');
+    const stat=fs.statSync(file), size=stat.size, range=req.headers.range;
+    res.setHeader('Content-Type', audioType(file)); res.setHeader('Accept-Ranges','bytes'); res.setHeader('Cache-Control','no-store');
+    if (range) {
+      const m=/bytes=(\d*)-(\d*)/.exec(range); let start=m&&m[1]?Number(m[1]):0; let end=m&&m[2]?Number(m[2]):size-1;
+      if (end>=size) end=size-1; if(start>end || start>=size) return send(res,416,'Range Not Satisfiable','text/plain');
+      res.writeHead(206, {'Content-Range':`bytes ${start}-${end}/${size}`,'Content-Length':end-start+1}); fs.createReadStream(file,{start,end}).pipe(res);
+    } else { res.writeHead(200, {'Content-Length':size}); fs.createReadStream(file).pipe(res); }
+    return;
   }
 
   // static
