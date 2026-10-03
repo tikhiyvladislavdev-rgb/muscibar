@@ -476,3 +476,160 @@ function notifyTop() {
   } catch (_) {}
 }
 
+// ---------- remote sync (Render / same origin) ----------
+const REMOTE_STATE_URL = (function () {
+  try {
+    if (typeof location !== 'undefined' && location.hostname && location.hostname.includes('onrender.com')) {
+      return location.origin + '/api/state';
+    }
+    if (typeof location !== 'undefined' && location.port === '8787') {
+      return location.origin + '/api/state';
+    }
+  } catch (_) {}
+  return '';
+})();
+
+let _remoteEnabled = !!REMOTE_STATE_URL;
+let _syncing = false;
+let _lastPull = 0;
+
+async function pullRemoteState() {
+  if (!_remoteEnabled || _syncing) return null;
+  try {
+    const res = await fetch(REMOTE_STATE_URL, { cache: 'no-store' });
+    if (!res.ok) return null;
+    const data = await res.json();
+    _lastPull = Date.now();
+    // apply to localStorage without re-broadcast storm
+    if (data.queue) localStorage.setItem(STORAGE_KEYS.queue, JSON.stringify(data.queue));
+    if (data.pending) localStorage.setItem(STORAGE_KEYS.pending, JSON.stringify(data.pending));
+    if (data.stoplist) localStorage.setItem(STORAGE_KEYS.stoplist, JSON.stringify(data.stoplist));
+    if (data.stats) localStorage.setItem(STORAGE_KEYS.stats, JSON.stringify(data.stats));
+    if (data.settings) localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(data.settings));
+    if (data.history) localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(data.history));
+    if (data.nowPlaying !== undefined) localStorage.setItem(STORAGE_KEYS.nowPlaying, JSON.stringify(data.nowPlaying));
+    if (data.trackStats) localStorage.setItem('bm_track_stats', JSON.stringify(data.trackStats));
+    listeners.forEach(fn => fn({ key: 'remote', value: data }));
+    return data;
+  } catch (e) {
+    console.warn('pullRemote', e);
+    return null;
+  }
+}
+
+async function pushRemoteState() {
+  if (!_remoteEnabled || _syncing) return;
+  _syncing = true;
+  try {
+    const payload = {
+      queue: getQueue(),
+      pending: getPending(),
+      stoplist: getStoplist(),
+      stats: getStats(),
+      settings: load(STORAGE_KEYS.settings, null),
+      history: getHistory(),
+      nowPlaying: getNowPlaying(),
+      trackStats: load('bm_track_stats', {})
+    };
+    await fetch(REMOTE_STATE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch (e) {
+    console.warn('pushRemote', e);
+  }
+  _syncing = false;
+}
+
+// Override createOrder to also POST /api/order for reliability
+const _createOrderOrig = typeof createOrder === 'function' ? createOrder : null;
+if (_createOrderOrig) {
+  createOrder = function (track, bid, guestId) {
+    const res = _createOrderOrig(track, bid, guestId);
+    if (res && res.ok) {
+      pushRemoteState();
+      // also dedicated endpoint
+      if (_remoteEnabled) {
+        const orderUrl = REMOTE_STATE_URL.replace(/\/api\/state$/, '/api/order');
+        fetch(orderUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ order: res.order })
+        }).catch(() => {});
+      }
+    }
+    return res;
+  };
+}
+
+// wrap mutators to push
+['setQueue', 'setPending', 'setStoplist', 'setNowPlaying', 'setSettings'].forEach((name) => {
+  if (typeof window !== 'undefined' && typeof eval(name) === 'function') {
+    // skip - use explicit hooks below
+  }
+});
+
+const _setQueue = setQueue;
+setQueue = function (q) {
+  const r = _setQueue(q);
+  pushRemoteState();
+  return r;
+};
+const _setPending = setPending;
+setPending = function (p) {
+  const r = _setPending(p);
+  pushRemoteState();
+  return r;
+};
+const _setStoplist = setStoplist;
+setStoplist = function (l) {
+  const r = _setStoplist(l);
+  pushRemoteState();
+  return r;
+};
+const _setNowPlaying = setNowPlaying;
+setNowPlaying = function (t) {
+  const r = _setNowPlaying(t);
+  pushRemoteState();
+  return r;
+};
+const _setSettings = setSettings;
+setSettings = function (partial) {
+  const r = _setSettings(partial);
+  pushRemoteState();
+  return r;
+};
+const _acceptOrder = acceptOrder;
+acceptOrder = function (id) {
+  const r = _acceptOrder(id);
+  pushRemoteState();
+  return r;
+};
+const _rejectOrder = rejectOrder;
+rejectOrder = function (id, reason) {
+  const r = _rejectOrder(id, reason);
+  pushRemoteState();
+  return r;
+};
+const _raiseBid = raiseBid;
+raiseBid = function (orderId, extra, guestId) {
+  const r = _raiseBid(orderId, extra, guestId);
+  if (r && r.ok) pushRemoteState();
+  return r;
+};
+const _playNext = playNext;
+playNext = function () {
+  const r = _playNext();
+  pushRemoteState();
+  return r;
+};
+
+// poll remote every 2s
+if (_remoteEnabled && typeof setInterval !== 'undefined') {
+  pullRemoteState();
+  setInterval(pullRemoteState, 2000);
+}
+
+console.log('Bar Music shared.js remote:', _remoteEnabled ? REMOTE_STATE_URL : 'off');
+
