@@ -159,6 +159,40 @@
     }
     .toast.show { transform: none; opacity: 1; }
 
+
+    .player-bar {
+      position: sticky; bottom: 0; left: 0; right: 0;
+      background: #0e0e0e; border-top: 2px solid var(--accent);
+      padding: 12px 16px; z-index: 100;
+      display: none; flex-direction: column; gap: 10px;
+      box-shadow: 0 -8px 32px rgba(0,0,0,.5);
+    }
+    .player-bar.show { display: flex; }
+    .player-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .player-top img { width: 52px; height: 52px; border-radius: 10px; object-fit: cover; background: #222; }
+    .player-meta { flex: 1; min-width: 120px; }
+    .player-meta .t { font-weight: 700; font-size: 14px; }
+    .player-meta .a { font-size: 12px; color: var(--muted); }
+    .player-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .player-frame {
+      width: 100%; height: 0; overflow: hidden; border-radius: 12px;
+      transition: height .25s;
+      background: #000;
+    }
+    .player-frame.open { height: 220px; }
+    .player-frame iframe { width: 100%; height: 220px; border: 0; border-radius: 12px; }
+    .btn-play {
+      background: var(--accent); color: #000; border: none;
+      border-radius: 10px; padding: 9px 14px; font-weight: 700;
+      font-size: 13px; cursor: pointer; font-family: inherit;
+    }
+    .btn-yt {
+      background: #ff0033; color: #fff; border: none;
+      border-radius: 10px; padding: 9px 14px; font-weight: 700;
+      font-size: 13px; cursor: pointer; font-family: inherit;
+    }
+    audio.admin-audio { width: 100%; max-width: 320px; height: 36px; }
+
     @media (max-width: 720px) {
       .layout { flex-direction: column; }
       .sidebar {
@@ -312,6 +346,25 @@
     </main>
   </div>
 
+  
+  <div class="player-bar" id="playerBar">
+    <div class="player-top">
+      <img id="plCover" src="" alt="" />
+      <div class="player-meta">
+        <div class="t" id="plTitle">—</div>
+        <div class="a" id="plArtist">—</div>
+      </div>
+      <div class="player-controls">
+        <button type="button" class="btn-play" id="plPreview">▶ Превью 30с</button>
+        <button type="button" class="btn-yt" id="plFull">▶ Полный трек здесь</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="plStop">⏹ Стоп</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="plHide">Скрыть</button>
+      </div>
+    </div>
+    <audio class="admin-audio" id="plAudio" controls style="display:none"></audio>
+    <div class="player-frame" id="plFrame"></div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script src="catalog.js"></script>
@@ -366,6 +419,7 @@
           </div>
           <div class="bid">${fmtMoney(o.bid)}</div>
           <div class="actions">
+            <button class="btn btn-play btn-sm" data-act="play" data-id="${o.id}">▶ Играть</button>
             <button class="btn btn-ok btn-sm" data-act="ok" data-id="${o.id}">Принять</button>
             <button class="btn btn-no btn-sm" data-act="no" data-id="${o.id}">Отклонить</button>
             <button class="btn btn-ghost btn-sm" data-act="stop" data-id="${o.id}">В стоп</button>
@@ -378,8 +432,13 @@
           const id = btn.dataset.id;
           const o = getPending().find(x => x.id === id);
           if (!o) return;
-          if (btn.dataset.act === 'ok') {
+          if (btn.dataset.act === 'play') {
+            openPlayer(o);
+            // auto try full track in admin
+            playFullInAdmin();
+          } else if (btn.dataset.act === 'ok') {
             acceptOrder(id);
+            openPlayer(o);
             toast('Принято → в очередь');
           } else if (btn.dataset.act === 'no') {
             rejectOrder(id, 'dj');
@@ -410,17 +469,26 @@
             <div class="meta">${esc(o.artist)}</div>
           </div>
           <div class="bid">${fmtMoney(o.bid)}</div>
+          <button class="btn btn-play btn-sm" data-play-q="${o.id}">▶</button>
           <button class="btn btn-ghost btn-sm" data-rm="${o.id}">Убрать</button>
         </div>
       `).join('');
       $('#queueList').querySelectorAll('[data-rm]').forEach(btn => {
         btn.onclick = () => { removeFromQueue(btn.dataset.rm); refresh(); toast('Убрано из очереди'); };
       });
+      $('#queueList').querySelectorAll('[data-play-q]').forEach(btn => {
+        btn.onclick = () => {
+          const o = getQueue().find(x => x.id === btn.dataset.playQ);
+          if (o) { openPlayer(o); playFullInAdmin(); }
+        };
+      });
     }
 
     $('#playNextBtn').onclick = () => {
       const next = playNext();
       if (!next) { toast('Очередь пуста'); return; }
+      openPlayer(next);
+      playFullInAdmin();
       toast('Играет: ' + next.title);
       refresh();
     };
@@ -588,6 +656,59 @@
       a.click();
       toast('CSV скачан');
     });
+
+
+    // ----- In-admin player -----
+    let currentPlay = null;
+    const ytAudio = null;
+
+    function stopAllPlay() {
+      const audio = document.getElementById('plAudio');
+      if (audio) { audio.pause(); audio.removeAttribute('src'); audio.style.display = 'none'; }
+      const frame = document.getElementById('plFrame');
+      if (frame) { frame.classList.remove('open'); frame.innerHTML = ''; }
+    }
+
+    function openPlayer(o) {
+      currentPlay = o;
+      document.getElementById('playerBar').classList.add('show');
+      document.getElementById('plCover').src = o.cover || '';
+      document.getElementById('plTitle').textContent = o.title || '';
+      document.getElementById('plArtist').textContent = o.artist || '';
+      stopAllPlay();
+    }
+
+    function playPreview() {
+      if (!currentPlay) return;
+      stopAllPlay();
+      const url = currentPlay.preview;
+      if (!url) { toast('Превью нет — жми «Полный трек здесь»'); return; }
+      const audio = document.getElementById('plAudio');
+      audio.style.display = 'block';
+      audio.src = url;
+      audio.play().catch(() => toast('Браузер заблокировал автозапуск — нажми play'));
+    }
+
+    function playFullInAdmin() {
+      if (!currentPlay) return;
+      stopAllPlay();
+      const q = encodeURIComponent((currentPlay.artist || '') + ' ' + (currentPlay.title || ''));
+      // YouTube embed search — играет прямо в админке
+      const src = 'https://www.youtube.com/embed?listType=search&list=' + q + '&autoplay=1';
+      const frame = document.getElementById('plFrame');
+      frame.innerHTML = '<iframe src="' + src + '" allow="autoplay; encrypted-media" allowfullscreen></iframe>';
+      frame.classList.add('open');
+      toast('Полный трек в админке (YouTube)');
+    }
+
+    document.getElementById('plPreview').onclick = playPreview;
+    document.getElementById('plFull').onclick = playFullInAdmin;
+    document.getElementById('plStop').onclick = stopAllPlay;
+    document.getElementById('plHide').onclick = () => {
+      stopAllPlay();
+      document.getElementById('playerBar').classList.remove('show');
+    };
+
 
     onSync(() => refresh());
     refresh();
