@@ -210,6 +210,8 @@ function createOrder(track, bid, guestId) {
   const order = {
     id: 'ord_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
     trackId: track.id,
+    yandexId: track.yandexId || (String(track.id || '').replace(/^ym_/, '') || ''),
+    albumId: track.albumId || '',
     title: track.title,
     artist: track.artist,
     cover: track.cover,

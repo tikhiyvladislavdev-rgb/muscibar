@@ -1164,6 +1164,11 @@
       const amount = parseInt($('#bidAmount').value, 10);
       const res = createOrder(selected, amount, guestId);
       if (!res.ok) { toast(res.error); return; }
+      try {
+        const sr = await fetch('/api/order', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({order:res.order})});
+        const sd = await sr.json();
+        if (!sr.ok) throw new Error(sd.error || 'Не удалось отправить заказ на сервер');
+      } catch(e) { console.warn('server order sync failed', e); }
       closeBid();
       try { notifySuccess(); } catch(_){}
       toast('Оплачено! Ждём диджея', true);

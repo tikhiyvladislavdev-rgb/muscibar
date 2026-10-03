@@ -223,6 +223,15 @@ function yandexBridge(action, payload = {}) {
   });
 }
 
+// Ynison queue mutations must be serialized: two admin accepts at once
+// would otherwise both read the same current queue and one update could win.
+let yandexQueueChain = Promise.resolve();
+function yandexEnqueueNext(payload) {
+  const job = yandexQueueChain.then(() => yandexBridge('ynison_enqueue_next', payload));
+  yandexQueueChain = job.catch(() => {});
+  return job;
+}
+
 function mapYandexResults(list) {
   return (Array.isArray(list) ? list : []).filter(t => t && t.title && t.artist).map(t => ({
     id: t.id || ('ym_' + t.yandexId),
@@ -234,6 +243,7 @@ function mapYandexResults(list) {
     preview: t.preview || '',
     explicit: !!t.explicit,
     source: 'yandex',
+    albumId: t.albumId || '',
     local: false
   }));
 }
@@ -249,6 +259,25 @@ function mapItunes(data) {
     explicit: t.trackExplicitness === 'explicit',
     source: 'itunes'
   }));
+}
+
+async function enrichYandexPreviews(list) {
+  const src = Array.isArray(list) ? list.slice(0, 20) : [];
+  const out = await Promise.all(src.map(async (t) => {
+    if (t.preview) return t;
+    try {
+      const term = encodeURIComponent((t.artist + ' ' + t.title).slice(0, 180));
+      const data = await fetchJson('https://itunes.apple.com/search?term=' + term + '&entity=song&limit=5&country=ru&media=music');
+      const candidates = mapItunes(data);
+      const exact = candidates.find(x =>
+        String(x.title).toLowerCase() === String(t.title).toLowerCase() &&
+        String(x.artist).toLowerCase() === String(t.artist).toLowerCase()
+      ) || candidates.find(x => String(x.title).toLowerCase() === String(t.title).toLowerCase());
+      return exact && exact.preview ? { ...t, preview: exact.preview } : t;
+    } catch (_) { return t; }
+  }));
+  const byKey = new Map(out.map(t => [(t.title + '|' + t.artist).toLowerCase(), t]));
+  return (Array.isArray(list) ? list : []).map(t => byKey.get((t.title + '|' + t.artist).toLowerCase()) || t);
 }
 
 function scoreTrack(q, t) {
@@ -293,7 +322,7 @@ async function unifiedSearch(q) {
     yandexResults.push(t);
   });
   yandexResults.sort((a, b) => scoreTrack(q, b) - scoreTrack(q, a));
-  if (yandexResults.length) return yandexResults.slice(0, 50);
+  if (yandexResults.length) return await enrichYandexPreviews(yandexResults.slice(0, 50));
 
   const tasks = [];
   unique.forEach((qq) => {
@@ -414,7 +443,9 @@ const server = http.createServer(async (req, res) => {
     const q = (u.searchParams.get('q') || '').trim().slice(0, 100);
     if (!q) return send(res, 200, { results: [] });
     const r = await yandexBridge('search', { q });
-    return send(res, r.ok ? 200 : 503, r.ok ? { results: mapYandexResults(r.data), q } : { results: [], error: r.error });
+    if (!r.ok) return send(res, 503, { results: [], error: r.error });
+    const results = await enrichYandexPreviews(mapYandexResults(r.data));
+    return send(res, 200, { results, q });
   }
 
   if (u.pathname === '/api/yandex/similar' && req.method === 'GET') {
@@ -541,6 +572,111 @@ const server = http.createServer(async (req, res) => {
       return send(res, 400, { error: String(e.message || e) });
     }
   }
+
+  if (u.pathname === '/api/admin/accept' && req.method === 'POST') {
+    if (!checkAdmin(req)) return send(res, 403, { ok: false, error: 'Нужен PIN админа' });
+    try {
+      const body = await readBody(req);
+      const id = String(body.orderId || '').trim();
+      if (!id) return send(res, 400, { ok: false, error: 'orderId required' });
+      const idx = (state.pending || []).findIndex(o => o.id === id);
+      if (idx < 0) return send(res, 404, { ok: false, error: 'Заказ не найден' });
+      const order = { ...state.pending[idx], status: 'accepted', acceptedAt: Date.now() };
+      state.pending.splice(idx, 1);
+      state.queue = state.queue || [];
+      // Accepted songs go to the end of the venue queue. The player takes them
+      // in this order after the currently playing item.
+      state.queue.push(order);
+      state.stats = state.stats || {};
+      state.stats.accepted = (state.stats.accepted || 0) + 1;
+      state.history = state.history || [];
+      state.history.unshift({ type: 'accepted', orderId: order.id, title: order.title, bid: order.bid, at: Date.now() });
+      state.history = state.history.slice(0, 300);
+      saveState();
+
+      // Immediately mirror the accepted Yandex track into the active Yandex
+      // device's live queue as the next item. The venue queue remains the
+      // source of truth even if Ynison is temporarily unavailable.
+      let yandex = { ok: false, queued: false, skipped: true, reason: 'Не Yandex-трек' };
+      const yandexTrackId = String(order.yandexId || order.trackId || '').replace(/^ym_/, '').trim();
+      if (yandexTrackId && !String(order.trackId || '').startsWith('it_')) {
+        yandex = await yandexEnqueueNext({
+          track_id: yandexTrackId,
+          title: order.title,
+          artist: order.artist,
+          cover: order.cover || '',
+          album_id: order.albumId || order.album_id || null
+        });
+        if (yandex.ok && yandex.data) {
+          order.yandexQueued = true;
+          order.yandexQueuedAt = Date.now();
+          order.yandexDevice = yandex.data.activeDevice || null;
+        } else {
+          order.yandexQueued = false;
+          order.yandexQueueError = yandex.error || 'Не удалось добавить в очередь Yandex';
+          state.history.unshift({ type: 'yandex_queue_error', orderId: order.id, title: order.title, error: order.yandexQueueError, at: Date.now() });
+          state.history = state.history.slice(0, 300);
+        }
+        saveState();
+      }
+
+      return send(res, 200, { ok: true, order, queue: state.queue, pending: state.pending, yandex });
+    } catch (e) {
+      return send(res, 400, { ok: false, error: String(e.message || e) });
+    }
+  }
+
+  if (u.pathname === '/api/admin/reject' && req.method === 'POST') {
+    if (!checkAdmin(req)) return send(res, 403, { ok: false, error: 'Нужен PIN админа' });
+    try {
+      const body = await readBody(req);
+      const id = String(body.orderId || '').trim();
+      const reason = String(body.reason || 'dj').slice(0, 40);
+      const idx = (state.pending || []).findIndex(o => o.id === id);
+      if (idx < 0) return send(res, 404, { ok: false, error: 'Заказ не найден' });
+      const order = state.pending.splice(idx, 1)[0];
+      state.stats = state.stats || {};
+      state.stats.rejected = (state.stats.rejected || 0) + 1;
+      state.history = state.history || [];
+      state.history.unshift({ type: 'rejected', orderId: order.id, title: order.title, bid: order.bid, reason, at: Date.now() });
+      state.history = state.history.slice(0, 300);
+      saveState();
+      return send(res, 200, { ok: true, order, pending: state.pending });
+    } catch (e) {
+      return send(res, 400, { ok: false, error: String(e.message || e) });
+    }
+  }
+
+  if (u.pathname === '/api/admin/remove-queue' && req.method === 'POST') {
+    if (!checkAdmin(req)) return send(res, 403, { ok: false, error: 'Нужен PIN админа' });
+    try {
+      const body = await readBody(req);
+      const id = String(body.orderId || '').trim();
+      const before = state.queue || [];
+      state.queue = before.filter(o => o.id !== id);
+      saveState();
+      return send(res, 200, { ok: true, queue: state.queue });
+    } catch (e) {
+      return send(res, 400, { ok: false, error: String(e.message || e) });
+    }
+  }
+
+  if (u.pathname === '/api/player/next' && req.method === 'POST') {
+    try {
+      if (!(state.queue || []).length) return send(res, 200, { ok: false, error: 'Очередь пуста', nowPlaying: state.nowPlaying, queue: [] });
+      const next = { ...state.queue[0], status: 'playing', playedAt: Date.now() };
+      state.queue = state.queue.slice(1);
+      state.nowPlaying = next;
+      state.history = state.history || [];
+      state.history.unshift({ type: 'played', orderId: next.id, title: next.title, bid: next.bid, at: Date.now() });
+      state.history = state.history.slice(0, 300);
+      saveState();
+      return send(res, 200, { ok: true, nowPlaying: next, queue: state.queue });
+    } catch (e) {
+      return send(res, 400, { ok: false, error: String(e.message || e) });
+    }
+  }
+
 
   // static
   try {

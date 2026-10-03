@@ -375,12 +375,21 @@
       };
     });
 
+    async function syncServerState() {
+      try {
+        const r = await fetch('/api/state', {cache:'no-store'});
+        if (!r.ok) return;
+        const d = await r.json();
+        if (Array.isArray(d.pending)) setPending(d.pending);
+        if (Array.isArray(d.queue)) setQueue(d.queue);
+        if (d.stats) localStorage.setItem(STORAGE_KEYS.stats, JSON.stringify(d.stats));
+        if (d.history) localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(d.history));
+      } catch(e) { console.warn('state sync', e); }
+    }
     function refresh() {
-      renderPending();
-      renderQueue();
-      renderStoplist();
-      renderStats();
-      loadSettingsForm();
+      syncServerState().finally(() => {
+        renderPending(); renderQueue(); renderStoplist(); renderStats(); loadSettingsForm();
+      });
     }
 
     function renderPending() {
@@ -410,20 +419,30 @@
       `).join('');
 
       $('#pendingList').querySelectorAll('[data-act]').forEach(btn => {
-        btn.onclick = () => {
+        btn.onclick = async () => {
           const id = btn.dataset.id;
           const o = getPending().find(x => x.id === id);
           if (!o) return;
           if (btn.dataset.act === 'ok') {
-            acceptOrder(id);
-            toast('Принято → в очередь');
+            try {
+              const r=await fetch('/api/admin/accept',{method:'POST',headers:adminPinHeader(),body:JSON.stringify({orderId:id})});
+              const d=await r.json(); if(!r.ok) throw Error(d.error||'Не удалось принять');
+              if(Array.isArray(d.pending)) setPending(d.pending); if(Array.isArray(d.queue)) setQueue(d.queue);
+              toast(d.yandex && d.yandex.ok && d.yandex.data && d.yandex.data.queued ? 'Принято → следующий трек Yandex' : 'Принято → в очередь DJ');
+            } catch(e){toast(e.message);}
           } else if (btn.dataset.act === 'no') {
-            rejectOrder(id, 'dj');
-            toast('Отклонено');
+            try {
+              const r=await fetch('/api/admin/reject',{method:'POST',headers:adminPinHeader(),body:JSON.stringify({orderId:id,reason:'dj'})});
+              const d=await r.json(); if(!r.ok) throw Error(d.error||'Не удалось отклонить');
+              if(Array.isArray(d.pending)) setPending(d.pending); toast('Отклонено');
+            } catch(e){toast(e.message);}
           } else if (btn.dataset.act === 'stop') {
             addToStoplist(o.title, o.artist, true);
-            rejectOrder(id, 'stoplist');
-            toast('В стоп-лист + отклонено');
+            try {
+              const r=await fetch('/api/admin/reject',{method:'POST',headers:adminPinHeader(),body:JSON.stringify({orderId:id,reason:'stoplist'})});
+              const d=await r.json(); if(!r.ok) throw Error(d.error||'Не удалось отклонить');
+              if(Array.isArray(d.pending)) setPending(d.pending); toast('В стоп-лист + отклонено');
+            } catch(e){toast(e.message);}
           }
           refresh();
         };
@@ -450,7 +469,13 @@
         </div>
       `).join('');
       $('#queueList').querySelectorAll('[data-rm]').forEach(btn => {
-        btn.onclick = () => { removeFromQueue(btn.dataset.rm); refresh(); toast('Убрано из очереди'); };
+        btn.onclick = async () => {
+          try {
+            const r=await fetch('/api/admin/remove-queue',{method:'POST',headers:adminPinHeader(),body:JSON.stringify({orderId:btn.dataset.rm})});
+            const d=await r.json(); if(!r.ok) throw Error(d.error||'Не удалось убрать');
+            if(Array.isArray(d.queue)) setQueue(d.queue); refresh(); toast('Убрано из очереди');
+          } catch(e){toast(e.message);}
+        };
       });
     }
 
