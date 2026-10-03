@@ -1,0 +1,13 @@
+{
+  "name": "bar-music",
+  "version": "4.0.0",
+  "description": "Music bid system for bars — guest + admin + hall + Deezer search proxy",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}

@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0a0a0a" />
+  <title>Админка · Бар Мята</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --card: #141414;
+      --border: #2a2a2a;
+      --text: #f0f0f0;
+      --muted: #888;
+      --accent: #e8ff47;
+      --accent-dim: rgba(232,255,71,.12);
+      --ok: #3dd68c;
+      --danger: #ff5c7a;
+      --warn: #ffb020;
+      --blue: #5b9dff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: Inter, system-ui, sans-serif;
+      min-height: 100dvh; -webkit-font-smoothing: antialiased;
+    }
+    .layout { display: flex; min-height: 100dvh; }
+    #adminApp.layout { display: flex; }
+    .sidebar {
+      width: 220px; background: #0e0e0e; border-right: 1px solid var(--border);
+      padding: 20px 12px; flex-shrink: 0; display: flex; flex-direction: column;
+    }
+    .sidebar .brand {
+      font-weight: 800; font-size: 15px; color: var(--accent);
+      padding: 8px 12px 20px; letter-spacing: .5px;
+    }
+    .nav-btn {
+      display: flex; align-items: center; gap: 10px;
+      width: 100%; text-align: left; padding: 11px 12px;
+      background: transparent; border: none; color: var(--muted);
+      font-size: 13.5px; font-weight: 500; border-radius: 10px;
+      cursor: pointer; font-family: inherit; margin-bottom: 2px;
+    }
+    .nav-btn:hover { background: #1a1a1a; color: var(--text); }
+    .nav-btn.active { background: var(--accent-dim); color: var(--accent); }
+    .nav-btn .dot {
+      width: 8px; height: 8px; border-radius: 50%; background: var(--danger);
+      margin-left: auto; display: none;
+    }
+    .nav-btn .dot.on { display: block; }
+    .side-foot { margin-top: auto; padding: 12px; font-size: 12px; color: #555; }
+    .side-foot a { color: var(--accent); text-decoration: none; }
+
+    .content { flex: 1; padding: 24px 28px; overflow-y: auto; max-width: 1000px; }
+
+    h1 { font-size: 22px; font-weight: 800; margin-bottom: 6px; }
+    .sub { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+
+    .stats {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px; margin-bottom: 28px;
+    }
+    .stat {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 16px;
+    }
+    .stat .label { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); font-weight: 600; }
+    .stat .val { font-size: 26px; font-weight: 800; margin-top: 6px; }
+    .stat .val.accent { color: var(--accent); }
+    .stat .val.ok { color: var(--ok); }
+    .stat .val.danger { color: var(--danger); }
+
+    .panel {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 18px; margin-bottom: 20px;
+    }
+    .panel h2 {
+      font-size: 14px; font-weight: 700; margin-bottom: 14px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .panel h2 .cnt {
+      background: var(--accent-dim); color: var(--accent);
+      font-size: 12px; padding: 2px 8px; border-radius: 999px;
+    }
+
+    .order {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px; border-radius: 12px; background: #1a1a1a;
+      border: 1px solid var(--border); margin-bottom: 8px;
+    }
+    .order img { width: 48px; height: 48px; border-radius: 10px; object-fit: cover; }
+    .order .info { flex: 1; min-width: 0; }
+    .order .title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .order .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .order .bid { font-size: 16px; font-weight: 800; color: var(--accent); white-space: nowrap; }
+    .order .actions { display: flex; gap: 6px; flex-shrink: 0; }
+    .btn {
+      border: none; border-radius: 10px; padding: 9px 14px;
+      font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
+    }
+    .btn-ok { background: var(--ok); color: #000; }
+    .btn-no { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
+    .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-accent { background: var(--accent); color: #000; }
+    .btn-sm { padding: 6px 10px; font-size: 12px; }
+
+    .empty { text-align: center; padding: 32px; color: var(--muted); font-size: 14px; }
+
+    .q-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px; border-bottom: 1px solid var(--border);
+    }
+    .q-row:last-child { border-bottom: none; }
+    .pos {
+      width: 24px; height: 24px; border-radius: 50%;
+      background: var(--accent-dim); color: var(--accent);
+      font-size: 11px; font-weight: 700; display: grid; place-items: center;
+    }
+    .pos.top { background: var(--accent); color: #000; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; color: var(--muted); font-weight: 600; font-size: 11px;
+      text-transform: uppercase; letter-spacing: .6px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+    td { padding: 10px; border-bottom: 1px solid var(--border); }
+    tr:last-child td { border-bottom: none; }
+
+    .form-row { margin-bottom: 14px; }
+    .form-row label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; font-weight: 500; }
+    .form-row input, .form-row select {
+      width: 100%; background: #1a1a1a; border: 1px solid var(--border);
+      border-radius: 10px; padding: 11px 14px; color: var(--text);
+      font-size: 14px; font-family: inherit; outline: none;
+    }
+    .form-row input:focus { border-color: var(--accent); }
+
+    .stop-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 12px; background: #1a1a1a; border-radius: 10px;
+      border: 1px solid var(--border); margin-bottom: 8px;
+    }
+    .stop-item .t { flex: 1; }
+    .stop-item .t strong { font-size: 13.5px; }
+    .stop-item .t span { font-size: 12px; color: var(--muted); display: block; }
+    .tag {
+      font-size: 10px; font-weight: 700; background: var(--danger);
+      color: #fff; padding: 2px 6px; border-radius: 4px;
+    }
+
+    .tabs { display: none; }
+    .tabs.active { display: block; }
+
+    .toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: #1a1a1a; border: 1px solid var(--border);
+      padding: 12px 18px; border-radius: 12px; font-size: 13px;
+      transform: translateY(80px); opacity: 0; transition: .3s; z-index: 50;
+    }
+    .toast.show { transform: none; opacity: 1; }
+
+    @media (max-width: 720px) {
+      .layout { flex-direction: column; }
+      .sidebar {
+        width: 100%; flex-direction: row; flex-wrap: wrap;
+        padding: 10px; border-right: none; border-bottom: 1px solid var(--border);
+        align-items: center;
+      }
+      .sidebar .brand { padding: 4px 8px; width: 100%; }
+      .nav-btn { width: auto; padding: 8px 12px; font-size: 12px; }
+      .side-foot { display: none; }
+      .content { padding: 16px; }
+      .order { flex-wrap: wrap; }
+      .order .actions { width: 100%; justify-content: flex-end; }
+    }
+  </style>
+</head>
+<body>
+  <div id="pinGate" style="position:fixed;inset:0;background:#0a0a0a;z-index:999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px">
+    <div style="font-weight:800;font-size:18px;color:#e8ff47">Вход в админку</div>
+    <input id="pinInput" type="password" inputmode="numeric" placeholder="PIN" maxlength="8"
+      style="background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:14px 18px;color:#fff;font-size:20px;text-align:center;width:160px;letter-spacing:4px;outline:none" />
+    <button id="pinBtn" class="btn btn-accent">Войти</button>
+    <div id="pinErr" style="color:#ff5c7a;font-size:13px;display:none">Неверный PIN</div>
+    <a href="index-v4.html" style="color:#666;font-size:13px;margin-top:12px">← К гостям</a>
+  </div>
+  <div class="layout" id="adminApp" style="display:none">
+    <aside class="sidebar">
+      <div class="brand">BZ · АДМИНКА</div>
+      <button class="nav-btn active" data-tab="pending">Входящие <span class="dot" id="pendingDot"></span></button>
+      <button class="nav-btn" data-tab="queue">Очередь</button>
+      <button class="nav-btn" data-tab="stoplist">Стоп-лист</button>
+      <button class="nav-btn" data-tab="stats">Аналитика</button>
+      <button class="nav-btn" data-tab="settings">Настройки</button>
+      <div class="side-foot">
+        <a href="index.html" target="_blank">← Гостевая страница</a>
+      </div>
+    </aside>
+
+    <main class="content">
+      <!-- PENDING -->
+      <div class="tabs active" id="tab-pending">
+        <h1>Входящие заказы</h1>
+        <p class="sub">Принимай или отклоняй треки. После принятия они попадают в очередь по сумме бида.</p>
+        <div class="panel">
+          <h2>Ожидают решения <span class="cnt" id="pendingCnt">0</span></h2>
+          <div id="pendingList"><div class="empty">Нет новых заказов</div></div>
+        </div>
+      </div>
+
+      <!-- QUEUE -->
+      <div class="tabs" id="tab-queue">
+        <h1>Очередь на эфир</h1>
+        <p class="sub">Сортировка по биду. Можно запустить следующий трек или убрать из очереди.</p>
+        <div style="margin-bottom:16px">
+          <button class="btn btn-accent" id="playNextBtn">▶ Запустить следующий</button>
+        </div>
+        <div class="panel">
+          <h2>В очереди <span class="cnt" id="queueCnt">0</span></h2>
+          <div id="queueList"><div class="empty">Очередь пуста</div></div>
+        </div>
+      </div>
+
+      <!-- STOPLIST -->
+      <div class="tabs" id="tab-stoplist">
+        <h1>Стоп-лист</h1>
+        <p class="sub">Заблокированные треки не появятся в поиске у гостей. Можно блокировать все версии (ремиксы, covers).</p>
+        <div class="panel">
+          <h2>Добавить в стоп-лист через поиск</h2>
+          <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Найди трек → нажми «В стоп». Система заблокирует <b>все версии</b> с похожим названием.</p>
+          <div class="form-row">
+            <label>Поиск трека</label>
+            <input id="stopSearch" placeholder="Например: Лепс рюмка или Despacito" />
+          </div>
+          <div id="stopSearchResults" style="margin-top:10px"></div>
+        </div>
+        <div class="panel">
+          <h2>Список <span class="cnt" id="stopCnt">0</span></h2>
+          <div id="stopList"><div class="empty">Стоп-лист пуст</div></div>
+        </div>
+      </div>
+
+      <!-- STATS -->
+      <div class="tabs" id="tab-stats">
+        <h1>Аналитика</h1>
+        <p class="sub">Статистика заказов и выручки (данные в этом браузере).</p>
+        <div style="margin-bottom:16px">
+          <button class="btn btn-ghost" id="exportShift">⬇ Экспорт смены (CSV)</button>
+        </div>
+        <div class="stats" id="statsGrid"></div>
+        <div class="panel">
+          <h2>История операций</h2>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr><th>Время</th><th>Событие</th><th>Трек</th><th>Сумма</th></tr>
+              </thead>
+              <tbody id="historyBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- SETTINGS -->
+      <div class="tabs" id="tab-settings">
+        <h1>Настройки заведения</h1>
+        <p class="sub">Название, адрес, минимальный бид, цвет акцента.</p>
+        <div class="panel">
+          <div class="form-row">
+            <label>Название</label>
+            <input id="setName" />
+          </div>
+          <div class="form-row">
+            <label>Адрес</label>
+            <input id="setAddr" />
+          </div>
+          <div class="form-row">
+            <label>Текст логотипа (2–4 буквы)</label>
+            <input id="setLogo" maxlength="4" />
+          </div>
+          <div class="form-row">
+            <label>Минимальный бид (₽)</label>
+            <input id="setMin" type="number" min="50" step="50" />
+          </div>
+          <div class="form-row">
+            <label>Цвет акцента</label>
+            <input id="setAccent" type="color" style="height:42px;padding:4px" />
+          </div>
+          <div class="form-row">
+            <label>URL обложки заведения</label>
+            <input id="setCover" placeholder="https://..." />
+          </div>
+          <div class="form-row">
+            <label>PIN админки</label>
+            <input id="setPin" type="text" inputmode="numeric" maxlength="8" />
+          </div>
+          <div class="form-row">
+            <label>Search API (прокси Deezer)</label>
+            <input id="setApi" placeholder="http://localhost:8787/api/search" />
+          </div>
+          <div class="form-row">
+            <label>Средняя длина трека (сек) для ETA</label>
+            <input id="setAvg" type="number" min="60" step="10" />
+          </div>
+          <button class="btn btn-accent" id="saveSettings">Сохранить</button>
+        </div>
+        <div class="panel">
+          <h2>Опасная зона</h2>
+          <button class="btn btn-no" id="clearAll">Очистить все данные (очередь, заказы, статистика)</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="catalog.js"></script>
+  <script src="shared.js"></script>
+  <script>
+    const $ = s => document.querySelector(s);
+    const $$ = s => [...document.querySelectorAll(s)];
+
+    function toast(msg) {
+      const t = $('#toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      clearTimeout(t._t);
+      t._t = setTimeout(() => t.classList.remove('show'), 2500);
+    }
+
+    // tabs
+    $$('.nav-btn').forEach(btn => {
+      btn.onclick = () => {
+        $$('.nav-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        $$('.tabs').forEach(t => t.classList.remove('active'));
+        $('#tab-' + btn.dataset.tab).classList.add('active');
+        refresh();
+      };
+    });
+
+    function refresh() {
+      renderPending();
+      renderQueue();
+      renderStoplist();
+      renderStats();
+      loadSettingsForm();
+    }
+
+    function renderPending() {
+      const list = getPending();
+      $('#pendingCnt').textContent = list.length;
+      const dot = $('#pendingDot');
+      dot.classList.toggle('on', list.length > 0);
+
+      if (!list.length) {
+        $('#pendingList').innerHTML = '<div class="empty">Нет новых заказов — ждём гостей</div>';
+        return;
+      }
+      $('#pendingList').innerHTML = list.map(o => `
+        <div class="order">
+          <img src="${o.cover || ''}" alt="" onerror="this.style.background='#222'" />
+          <div class="info">
+            <div class="title">${esc(o.title)}</div>
+            <div class="meta">${esc(o.artist)} · ${new Date(o.time).toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'})}</div>
+          </div>
+          <div class="bid">${fmtMoney(o.bid)}</div>
+          <div class="actions">
+            <button class="btn btn-ok btn-sm" data-act="ok" data-id="${o.id}">Принять</button>
+            <button class="btn btn-no btn-sm" data-act="no" data-id="${o.id}">Отклонить</button>
+            <button class="btn btn-ghost btn-sm" data-act="stop" data-id="${o.id}">В стоп</button>
+          </div>
+        </div>
+      `).join('');
+
+      $('#pendingList').querySelectorAll('[data-act]').forEach(btn => {
+        btn.onclick = () => {
+          const id = btn.dataset.id;
+          const o = getPending().find(x => x.id === id);
+          if (!o) return;
+          if (btn.dataset.act === 'ok') {
+            acceptOrder(id);
+            toast('Принято → в очередь');
+          } else if (btn.dataset.act === 'no') {
+            rejectOrder(id, 'dj');
+            toast('Отклонено');
+          } else if (btn.dataset.act === 'stop') {
+            addToStoplist(o.title, o.artist, true);
+            rejectOrder(id, 'stoplist');
+            toast('В стоп-лист + отклонено');
+          }
+          refresh();
+        };
+      });
+    }
+
+    function renderQueue() {
+      const q = getQueue();
+      $('#queueCnt').textContent = q.length;
+      if (!q.length) {
+        $('#queueList').innerHTML = '<div class="empty">Очередь пуста</div>';
+        return;
+      }
+      $('#queueList').innerHTML = q.map((o, i) => `
+        <div class="q-row">
+          <div class="pos ${i===0?'top':''}">${i+1}</div>
+          <img src="${o.cover||''}" width="40" height="40" style="border-radius:8px;object-fit:cover" />
+          <div class="info" style="flex:1;min-width:0">
+            <div class="title">${esc(o.title)}</div>
+            <div class="meta">${esc(o.artist)}</div>
+          </div>
+          <div class="bid">${fmtMoney(o.bid)}</div>
+          <button class="btn btn-ghost btn-sm" data-rm="${o.id}">Убрать</button>
+        </div>
+      `).join('');
+      $('#queueList').querySelectorAll('[data-rm]').forEach(btn => {
+        btn.onclick = () => { removeFromQueue(btn.dataset.rm); refresh(); toast('Убрано из очереди'); };
+      });
+    }
+
+    $('#playNextBtn').onclick = () => {
+      const next = playNext();
+      if (!next) { toast('Очередь пуста'); return; }
+      toast('Играет: ' + next.title);
+      refresh();
+    };
+
+    function renderStoplist() {
+      const list = getStoplist();
+      $('#stopCnt').textContent = list.length;
+      if (!list.length) {
+        $('#stopList').innerHTML = '<div class="empty">Стоп-лист пуст</div>';
+        return;
+      }
+      $('#stopList').innerHTML = list.map(i => `
+        <div class="stop-item">
+          <div class="t">
+            <strong>${esc(i.title)}</strong>
+            <span>${esc(i.artist) || 'все артисты'}</span>
+          </div>
+          ${i.blockAllVersions ? '<span class="tag">ВСЕ ВЕРСИИ</span>' : ''}
+          <button class="btn btn-ghost btn-sm" data-del="${i.id}">Удалить</button>
+        </div>
+      `).join('');
+      $('#stopList').querySelectorAll('[data-del]').forEach(btn => {
+        btn.onclick = () => { removeFromStoplist(btn.dataset.del); refresh(); toast('Удалено'); };
+      });
+    }
+
+
+    // Stop-list search
+    let stopDebounce = null;
+    const stopCatalog = window.MUSIC_CATALOG || [];
+    $('#stopSearch').addEventListener('input', () => {
+      clearTimeout(stopDebounce);
+      stopDebounce = setTimeout(runStopSearch, 250);
+    });
+    function runStopSearch() {
+      const q = ($('#stopSearch').value || '').trim().toLowerCase();
+      const box = $('#stopSearchResults');
+      if (q.length < 1) { box.innerHTML = ''; return; }
+      const local = stopCatalog.filter(t =>
+        (t.title + ' ' + t.artist + ' ' + (t.tags||'')).toLowerCase().includes(q) ||
+        t.title.toLowerCase().startsWith(q) || t.artist.toLowerCase().includes(q)
+      ).slice(0, 12);
+      if (!local.length) {
+        box.innerHTML = '<div class="empty" style="padding:12px">Ничего в каталоге — можно добавить вручную ниже</div>' +
+          `<div class="form-row"><input id="stopManualTitle" placeholder="Название" value="${q}"/></div>
+           <div class="form-row"><input id="stopManualArtist" placeholder="Артист"/></div>
+           <button class="btn btn-accent btn-sm" id="stopManualAdd">В стоп (все версии)</button>`;
+        const btn = $('#stopManualAdd');
+        if (btn) btn.onclick = () => {
+          const title = $('#stopManualTitle').value.trim();
+          if (!title) return;
+          addToStoplist(title, $('#stopManualArtist').value.trim(), true);
+          toast('В стоп-листе: ' + title);
+          $('#stopSearch').value = '';
+          box.innerHTML = '';
+          refresh();
+        };
+        return;
+      }
+      box.innerHTML = local.map(t => `
+        <div class="order">
+          <div class="info"><div class="title">${t.title}</div><div class="meta">${t.artist}</div></div>
+          <button class="btn btn-no btn-sm" data-st-title="${t.title.replace(/"/g,'&quot;')}" data-st-artist="${t.artist.replace(/"/g,'&quot;')}">В стоп</button>
+        </div>`).join('');
+      box.querySelectorAll('[data-st-title]').forEach(btn => {
+        btn.onclick = () => {
+          addToStoplist(btn.dataset.stTitle, btn.dataset.stArtist, true);
+          toast('Заблокированы все версии: ' + btn.dataset.stTitle);
+          $('#stopSearch').value = '';
+          box.innerHTML = '';
+          refresh();
+        };
+      });
+    }
+
+
+    function renderStats() {
+      const s = getStats();
+      $('#statsGrid').innerHTML = `
+        <div class="stat"><div class="label">Всего заказов</div><div class="val">${s.totalOrders}</div></div>
+        <div class="stat"><div class="label">Принято</div><div class="val ok">${s.accepted}</div></div>
+        <div class="stat"><div class="label">Отклонено</div><div class="val danger">${s.rejected}</div></div>
+        <div class="stat"><div class="label">Выручка</div><div class="val accent">${fmtMoney(s.revenue)}</div></div>
+        <div class="stat"><div class="label">Сегодня заказов</div><div class="val">${s.todayOrders}</div></div>
+        <div class="stat"><div class="label">Сегодня выручка</div><div class="val accent">${fmtMoney(s.todayRevenue)}</div></div>
+      `;
+      const hist = getHistory().slice(0, 40);
+      const typeMap = { order: 'Заказ', accepted: 'Принято', rejected: 'Отклонено', raise: 'Поднятие', played: 'Сыграно' };
+      $('#historyBody').innerHTML = hist.length ? hist.map(h => `
+        <tr>
+          <td>${new Date(h.at).toLocaleString('ru-RU', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
+          <td>${typeMap[h.type] || h.type}</td>
+          <td>${esc(h.title || '')}</td>
+          <td>${h.bid != null ? fmtMoney(h.bid) : (h.extra != null ? '+' + fmtMoney(h.extra) : '—')}</td>
+        </tr>
+      `).join('') : '<tr><td colspan="4" style="text-align:center;color:#666">Пока пусто</td></tr>';
+    }
+
+    function loadSettingsForm() {
+      const s = getSettings();
+      $('#setName').value = s.venueName;
+      $('#setAddr').value = s.address;
+      $('#setLogo').value = s.logoText;
+      $('#setMin').value = s.minBid;
+      $('#setAccent').value = s.accent;
+      $('#setCover').value = s.coverUrl;
+      const pin = document.getElementById('setPin');
+      if (pin) pin.value = s.adminPin || '1234';
+      const api = document.getElementById('setApi');
+      if (api) api.value = s.searchApi || '';
+      const avg = document.getElementById('setAvg');
+      if (avg) avg.value = s.avgTrackSec || 210;
+    }
+
+    $('#saveSettings').onclick = () => {
+      setSettings({
+        venueName: $('#setName').value.trim() || 'БАР МЯТА',
+        address: $('#setAddr').value.trim(),
+        logoText: $('#setLogo').value.trim() || 'МЯ',
+        minBid: parseInt($('#setMin').value, 10) || 100,
+        accent: $('#setAccent').value,
+        coverUrl: $('#setCover').value.trim(),
+        adminPin: (document.getElementById('setPin') || {}).value || '1234',
+        searchApi: (document.getElementById('setApi') || {}).value || '',
+        avgTrackSec: parseInt((document.getElementById('setAvg') || {}).value, 10) || 210
+      });
+      toast('Настройки сохранены');
+    };
+
+    $('#clearAll').onclick = () => {
+      if (!confirm('Удалить очередь, заказы, стоп-лист и статистику?')) return;
+      Object.values(STORAGE_KEYS).forEach(k => localStorage.removeItem(k));
+      toast('Всё очищено');
+      refresh();
+    };
+
+
+    // PIN gate
+    (function() {
+      const unlocked = sessionStorage.getItem('bm_admin_ok') === '1';
+      if (unlocked) {
+        document.getElementById('pinGate').style.display = 'none';
+        document.getElementById('adminApp').style.display = 'flex';
+      }
+      function tryPin() {
+        const pin = document.getElementById('pinInput').value;
+        if (checkAdminPin(pin)) {
+          sessionStorage.setItem('bm_admin_ok', '1');
+          document.getElementById('pinGate').style.display = 'none';
+          document.getElementById('adminApp').style.display = 'flex';
+        } else {
+          document.getElementById('pinErr').style.display = 'block';
+        }
+      }
+      document.getElementById('pinBtn').onclick = tryPin;
+      document.getElementById('pinInput').onkeydown = (e) => { if (e.key === 'Enter') tryPin(); };
+    })();
+
+    document.getElementById('exportShift') && (document.getElementById('exportShift').onclick = () => {
+      const csv = exportShiftCsv();
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'shift-' + new Date().toISOString().slice(0, 10) + '.csv';
+      a.click();
+      toast('CSV скачан');
+    });
+
+    onSync(() => refresh());
+    refresh();
+    setInterval(refresh, 2500);
+  </script>
+</body>
+</html>

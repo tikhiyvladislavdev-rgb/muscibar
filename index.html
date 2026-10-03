@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#050505" />
+  <title>Бар Мята · Заказ музыки</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #050505;
+      --card: #121212;
+      --card2: #1a1a1a;
+      --border: #2a2a2a;
+      --text: #f4f4f4;
+      --muted: #888;
+      --accent: #e8ff47;
+      --accent-dim: rgba(232,255,71,.14);
+      --glow: rgba(232,255,71,.3);
+      --mint: #5dffb1;
+      --danger: #ff5c7a;
+      --safe: env(safe-area-inset-bottom, 0px);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: var(--bg); color: var(--text);
+      font-family: Inter, system-ui, sans-serif;
+      min-height: 100dvh; -webkit-font-smoothing: antialiased;
+    }
+    body { display: flex; flex-direction: column; }
+
+    .header {
+      position: sticky; top: 0; z-index: 40;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px;
+      background: rgba(5,5,5,.88); backdrop-filter: blur(16px);
+      border-bottom: 1px solid transparent;
+    }
+    .header.scrolled { border-bottom-color: var(--border); }
+    .logo {
+      width: 40px; height: 40px; border-radius: 50%;
+      border: 2px solid var(--accent); color: var(--accent);
+      display: grid; place-items: center; font-weight: 800; font-size: 13px;
+      box-shadow: 0 0 18px var(--glow);
+    }
+    .icon-btn {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: var(--card); border: 1px solid var(--border);
+      color: var(--text); display: grid; place-items: center; cursor: pointer;
+      position: relative;
+    }
+    .badge {
+      position: absolute; top: -3px; right: -3px;
+      background: var(--accent); color: #000; font-size: 10px; font-weight: 700;
+      min-width: 16px; height: 16px; border-radius: 8px; display: grid; place-items: center; padding: 0 4px;
+    }
+
+    .search-wrap {
+      padding: 10px 16px 6px; position: sticky; top: 64px; z-index: 30;
+      background: linear-gradient(to bottom, var(--bg) 60%, transparent);
+    }
+    .search-box {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 999px; padding: 12px 16px;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .search-box:focus-within {
+      border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+    .search-box input {
+      flex: 1; background: transparent; border: none; outline: none;
+      color: var(--text); font-size: 16px; font-family: inherit;
+    }
+    .search-box input::placeholder { color: var(--muted); }
+    .search-clear {
+      width: 22px; height: 22px; border-radius: 50%; background: #333;
+      border: none; color: #aaa; display: none; place-items: center; cursor: pointer;
+    }
+    .search-box.has-value .search-clear { display: grid; }
+
+    .main {
+      flex: 1; padding: 0 16px calc(20px + var(--safe));
+      max-width: 560px; width: 100%; margin: 0 auto;
+    }
+
+    .venue { text-align: center; padding: 24px 0 16px; animation: up .45s ease; }
+    @keyframes up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+    .venue-cover-wrap { position: relative; width: 150px; height: 150px; margin: 0 auto 16px; }
+    .venue-cover {
+      width: 100%; height: 100%; border-radius: 20px; object-fit: cover;
+      box-shadow: 0 14px 40px rgba(0,0,0,.55);
+    }
+    .venue-glow {
+      position: absolute; inset: -18px;
+      background: radial-gradient(circle, var(--glow), transparent 70%);
+      opacity: .45; z-index: -1; pointer-events: none;
+    }
+    .venue h1 { font-size: 22px; font-weight: 800; letter-spacing: .5px; }
+    .venue .addr { color: var(--accent); font-size: 13px; margin: 4px 0 12px; font-weight: 500; }
+    .venue .desc { color: var(--muted); font-size: 13.5px; line-height: 1.5; max-width: 320px; margin: 0 auto 20px; }
+    .btn-cta {
+      display: inline-flex; align-items: center; gap: 8px; justify-content: center;
+      background: var(--accent); color: #0a0a0a; font-weight: 700; font-size: 15px;
+      padding: 14px 28px; border: none; border-radius: 999px; cursor: pointer;
+      box-shadow: 0 4px 22px var(--glow); font-family: inherit; width: 100%; max-width: 300px;
+    }
+
+    .section-title {
+      font-size: 12px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 1px; color: var(--muted); margin: 20px 0 10px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .section-title span { color: var(--accent); font-weight: 600; }
+
+    .q-card {
+      display: flex; align-items: center; gap: 12px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 10px 12px; margin-bottom: 8px;
+      animation: up .3s ease both;
+    }
+    .q-card.mine { border-color: var(--accent); background: var(--accent-dim); }
+    .q-pos {
+      width: 26px; height: 26px; border-radius: 50%;
+      background: var(--accent-dim); color: var(--accent);
+      font-size: 11px; font-weight: 700; display: grid; place-items: center; flex-shrink: 0;
+    }
+    .q-pos.top { background: var(--accent); color: #000; }
+    .q-cover { width: 42px; height: 42px; border-radius: 9px; object-fit: cover; flex-shrink: 0; }
+    .q-info { flex: 1; min-width: 0; }
+    .q-title { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .q-artist { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .q-right { text-align: right; flex-shrink: 0; }
+    .q-bid { font-size: 13px; font-weight: 700; color: var(--accent); }
+    .q-raise {
+      margin-top: 4px; font-size: 11px; color: var(--muted);
+      background: transparent; border: 1px solid var(--border);
+      border-radius: 999px; padding: 3px 8px; cursor: pointer; color: var(--text);
+      font-family: inherit;
+    }
+    .q-raise:hover { border-color: var(--accent); color: var(--accent); }
+
+    .track-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 12px; background: var(--card); border-radius: 14px;
+      border: 1px solid transparent; cursor: pointer; margin-bottom: 6px;
+      transition: .15s; animation: up .25s ease both;
+    }
+    .track-row:hover { background: var(--card2); border-color: var(--border); }
+    .t-cover-wrap { position: relative; width: 50px; height: 50px; flex-shrink: 0; }
+    .t-cover { width: 100%; height: 100%; border-radius: 10px; object-fit: cover; background: #222; }
+    .t-play {
+      position: absolute; inset: 0; background: rgba(0,0,0,.5); border-radius: 10px;
+      display: grid; place-items: center; opacity: 0; transition: .15s;
+    }
+    .track-row:hover .t-play, .track-row.playing .t-play { opacity: 1; }
+    .t-meta { flex: 1; min-width: 0; }
+    .t-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .t-artist { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .t-dur { font-size: 12px; color: var(--muted); }
+    .explicit {
+      font-size: 9px; font-weight: 700; background: #333; color: #aaa;
+      padding: 1px 4px; border-radius: 3px; margin-left: 5px;
+    }
+
+    .empty { text-align: center; padding: 40px 16px; color: var(--muted); font-size: 14px; }
+    .sk { display: flex; gap: 12px; padding: 10px; margin-bottom: 6px; }
+    .sk-c { width: 50px; height: 50px; border-radius: 10px; background: linear-gradient(90deg,#1a1a1a,#252525,#1a1a1a); background-size: 200%; animation: sh 1.2s infinite; }
+    .sk-l { height: 12px; border-radius: 6px; background: linear-gradient(90deg,#1a1a1a,#252525,#1a1a1a); background-size: 200%; animation: sh 1.2s infinite; margin: 6px 0; }
+    @keyframes sh { 0%{background-position:200%} 100%{background-position:-200%} }
+
+    /* overlays */
+    .overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.72); backdrop-filter: blur(6px);
+      z-index: 100; display: flex; align-items: flex-end; justify-content: center;
+      opacity: 0; pointer-events: none; transition: opacity .25s;
+    }
+    .overlay.open { opacity: 1; pointer-events: auto; }
+    .sheet {
+      background: #111; border: 1px solid var(--border); border-bottom: none;
+      border-radius: 22px 22px 0 0; width: 100%; max-width: 480px;
+      padding: 12px 20px calc(24px + var(--safe));
+      transform: translateY(110%); transition: transform .32s cubic-bezier(.32,.72,0,1);
+      max-height: 90dvh; overflow-y: auto;
+    }
+    .overlay.open .sheet { transform: none; }
+    .handle { width: 36px; height: 4px; background: #333; border-radius: 2px; margin: 0 auto 16px; }
+
+    .sheet-track { display: flex; gap: 14px; align-items: center; margin-bottom: 16px; }
+    .sheet-track img { width: 68px; height: 68px; border-radius: 12px; object-fit: cover; }
+    .sheet-track .tt { font-size: 16px; font-weight: 700; }
+    .sheet-track .ta { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+    .preview-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--card); border: 1px solid var(--border); color: var(--text);
+      padding: 9px 14px; border-radius: 999px; font-size: 13px; cursor: pointer;
+      margin-bottom: 16px; font-family: inherit;
+    }
+    .preview-btn.playing { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+
+    .bid-label { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); font-weight: 600; margin-bottom: 8px; }
+    .bid-row {
+      display: flex; align-items: center; background: var(--card);
+      border: 1px solid var(--border); border-radius: 12px; padding: 6px 8px 6px 16px; margin-bottom: 8px;
+    }
+    .bid-row:focus-within { border-color: var(--accent); }
+    .bid-row span { font-size: 18px; font-weight: 700; color: var(--muted); margin-right: 6px; }
+    .bid-row input {
+      flex: 1; background: transparent; border: none; outline: none;
+      color: var(--text); font-size: 26px; font-weight: 800; font-family: inherit;
+    }
+    .bid-hint { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+    .presets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+    .preset {
+      background: var(--card); border: 1px solid var(--border); color: var(--text);
+      padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 600;
+      cursor: pointer; font-family: inherit;
+    }
+    .preset.active { background: var(--accent); color: #0a0a0a; border-color: var(--accent); }
+
+    .btn-main {
+      width: 100%; background: var(--accent); color: #0a0a0a; font-weight: 800;
+      font-size: 15px; padding: 15px; border: none; border-radius: 999px;
+      cursor: pointer; box-shadow: 0 4px 18px var(--glow); font-family: inherit;
+    }
+
+    /* SBP mock */
+    .sbp-box {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 16px; margin-bottom: 16px; text-align: center;
+    }
+    .sbp-logo {
+      font-weight: 800; font-size: 18px; letter-spacing: 1px;
+      background: linear-gradient(90deg, #5B2CFF, #00C2FF); -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent; margin-bottom: 8px;
+    }
+    .sbp-qr {
+      width: 140px; height: 140px; margin: 12px auto;
+      background: #fff; border-radius: 12px;
+      display: grid; place-items: center; color: #111; font-size: 11px; font-weight: 600;
+    }
+    .sbp-amount { font-size: 28px; font-weight: 800; margin: 8px 0; }
+    .sbp-status { font-size: 13px; color: var(--muted); }
+
+    .toast {
+      position: fixed; bottom: calc(24px + var(--safe)); left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: #1a1a1a; border: 1px solid var(--border); color: var(--text);
+      padding: 12px 20px; border-radius: 999px; font-size: 13.5px; font-weight: 500;
+      z-index: 200; transition: transform .3s; white-space: nowrap; max-width: 90vw;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+    .toast.ok { border-color: var(--mint); }
+
+    .panel-ov {
+      position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 80;
+      opacity: 0; pointer-events: none; transition: .25s;
+    }
+    .panel-ov.open { opacity: 1; pointer-events: auto; }
+    .side {
+      position: fixed; top: 0; right: 0; bottom: 0; width: min(360px, 92vw);
+      background: #0e0e0e; border-left: 1px solid var(--border); z-index: 90;
+      transform: translateX(100%); transition: transform .32s cubic-bezier(.32,.72,0,1);
+      display: flex; flex-direction: column;
+    }
+    .side.open { transform: none; }
+    .side-h {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 16px; border-bottom: 1px solid var(--border);
+    }
+    .side-h h2 { font-size: 15px; font-weight: 700; }
+    .side-b { flex: 1; overflow-y: auto; padding: 12px; }
+
+    .view-home { display: block; }
+    .view-search { display: none; }
+    body.searching .view-home { display: none; }
+    body.searching .view-search { display: block; }
+
+    .footer { text-align: center; padding: 16px; font-size: 12px; color: #555; }
+    .footer a { color: #666; text-decoration: none; }
+
+    @media (min-width: 640px) {
+      .overlay { align-items: center; }
+      .sheet { border-radius: 22px; border: 1px solid var(--border); max-height: 85vh; }
+    }
+  </style>
+</head>
+<body>
+  <header class="header" id="header">
+    <div class="logo" id="logoText">МЯ</div>
+    <button class="icon-btn" id="queueBtn" title="Очередь">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h12M4 18h14"/></svg>
+      <span class="badge" id="qBadge" style="display:none">0</span>
+    </button>
+  </header>
+
+  <div class="search-wrap">
+    <div class="search-box" id="searchBox">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="searchInput" type="text" placeholder="Поиск по названию трека..." autocomplete="off" spellcheck="false" />
+      <button class="search-clear" id="searchClear">×</button>
+    </div>
+  </div>
+
+  <main class="main">
+    <div class="view-home">
+      <div class="venue">
+        <div class="venue-cover-wrap">
+          <div class="venue-glow"></div>
+          <img class="venue-cover" id="venueCover" src="" alt="" />
+        </div>
+        <h1 id="venueName">БАР МЯТА</h1>
+        <div class="addr" id="venueAddr"></div>
+        <p class="desc">Выбери трек, поставь бид и оплати через СБП. Чем выше ставка — тем выше в очереди. Можно поднять чужой трек!</p>
+        <button class="btn-cta" id="goSearch">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          Найти трек
+        </button>
+      </div>
+
+      <div id="liveQueueBlock" style="display:none">
+        <div class="section-title">Живая очередь <span id="liveCount"></span></div>
+        <div id="liveQueue"></div>
+      </div>
+    </div>
+
+    <div class="view-search">
+      <div class="section-title" id="resTitle">Результаты</div>
+      <div id="results"><div class="empty">Введи название трека</div></div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <a href="admin.html">Админка</a> · Сотрудничество · Оферта
+  </footer>
+
+  <!-- Bid + Pay sheet -->
+  <div class="overlay" id="bidOverlay">
+    <div class="sheet">
+      <div class="handle"></div>
+      <div class="sheet-track">
+        <img id="sCover" src="" alt="" />
+        <div>
+          <div class="tt" id="sTitle"></div>
+          <div class="ta" id="sArtist"></div>
+        </div>
+      </div>
+      <button class="preview-btn" id="previewBtn">▶ Слушать 30 сек</button>
+
+      <div id="stepBid">
+        <div class="bid-label">Сумма бида</div>
+        <div class="bid-row">
+          <span>₽</span>
+          <input type="number" id="bidAmount" value="200" min="100" step="50" inputmode="numeric" />
+        </div>
+        <div class="bid-hint" id="bidHint">Минимум 100 ₽</div>
+        <div class="presets">
+          <button class="preset" data-v="100">100</button>
+          <button class="preset active" data-v="200">200</button>
+          <button class="preset" data-v="300">300</button>
+          <button class="preset" data-v="500">500</button>
+          <button class="preset" data-v="1000">1 000</button>
+          <button class="preset" data-v="2000">2 000</button>
+        </div>
+        <button class="btn-main" id="toPay">Перейти к оплате СБП</button>
+      </div>
+
+      <div id="stepPay" style="display:none">
+        <div class="sbp-box">
+          <div class="sbp-logo">СБП</div>
+          <div class="sbp-amount" id="payAmount">200 ₽</div>
+          <div class="sbp-qr">QR-код оплаты<br>(демо)</div>
+          <div class="sbp-status" id="payStatus">Отсканируй в приложении банка</div>
+        </div>
+        <button class="btn-main" id="fakePay">Я оплатил (демо)</button>
+        <button class="preview-btn" id="backBid" style="width:100%;justify-content:center;margin-top:10px">← Изменить сумму</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Raise bid sheet -->
+  <div class="overlay" id="raiseOverlay">
+    <div class="sheet">
+      <div class="handle"></div>
+      <div class="sheet-track">
+        <img id="rCover" src="" alt="" />
+        <div>
+          <div class="tt" id="rTitle"></div>
+          <div class="ta" id="rArtist"></div>
+        </div>
+      </div>
+      <div class="bid-label">Поднять ставку на</div>
+      <div class="bid-row">
+        <span>₽</span>
+        <input type="number" id="raiseAmount" value="100" min="50" step="50" inputmode="numeric" />
+      </div>
+      <div class="bid-hint">Текущий бид: <strong id="rCurrent"></strong> → станет выше в очереди</div>
+      <div class="presets">
+        <button class="preset raise-p active" data-v="50">+50</button>
+        <button class="preset raise-p" data-v="100">+100</button>
+        <button class="preset raise-p" data-v="200">+200</button>
+        <button class="preset raise-p" data-v="500">+500</button>
+      </div>
+      <button class="btn-main" id="confirmRaise">Поднять и оплатить</button>
+    </div>
+  </div>
+
+  <div class="panel-ov" id="panelOv"></div>
+  <div class="side" id="sidePanel">
+    <div class="side-h">
+      <h2>Живая очередь</h2>
+      <button class="icon-btn" id="closePanel" style="width:36px;height:36px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="side-b" id="sideBody"></div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="shared.js" onerror="document.body.innerHTML='<div style=\'padding:40px;font-family:sans-serif;color:#fff;background:#111\'>Не найден файл <b>shared.js</b>. Скачай всю папку bar-music целиком (index.html + admin.html + shared.js) и открой index.html из неё.</div>'"></script>
+  <script>
+    // safety if shared not loaded
+    if (typeof getGuestId !== 'function') {
+      console.error('shared.js not loaded');
+    }
+
+    const guestId = getGuestId();
+    let selected = null;
+    let raiseTarget = null;
+    let audio = null;
+    let playingId = null;
+    let results = [];
+    let debounce = null;
+
+    const $ = s => document.querySelector(s);
+    const $$ = s => [...document.querySelectorAll(s)];
+
+    function toast(msg, ok) {
+      const t = $('#toast');
+      t.textContent = msg;
+      t.className = 'toast show' + (ok ? ' ok' : '');
+      clearTimeout(t._t);
+      t._t = setTimeout(() => t.classList.remove('show'), 2800);
+    }
+
+    function applySettings() {
+      const s = getSettings();
+      document.documentElement.style.setProperty('--accent', s.accent);
+      $('#venueName').textContent = s.venueName;
+      $('#venueAddr').textContent = s.address;
+      $('#logoText').textContent = (s.logoText || 'МЯ').slice(0, 3);
+      $('#venueCover').src = s.coverUrl;
+      $('#bidHint').textContent = `Минимум ${s.minBid} ₽ · чем выше — тем выше в очереди`;
+      $('#bidAmount').min = s.minBid;
+    }
+
+    // ----- search (JSONP iTunes) -----
+    function search(q) {
+      const query = q.trim();
+      if (!query) {
+        $('#results').innerHTML = '<div class="empty">Введи название трека</div>';
+        $('#resTitle').textContent = 'Результаты';
+        return;
+      }
+      $('#results').innerHTML = Array(4).fill(0).map(() => `<div class="sk"><div class="sk-c"></div><div style="flex:1"><div class="sk-l"></div><div class="sk-l" style="width:40%"></div></div></div>`).join('');
+      $('#resTitle').textContent = 'Ищем...';
+
+      function runJsonp(url, onDone, onFail) {
+        const cb = '_cb' + Date.now() + Math.random().toString(36).slice(2, 6);
+        const script = document.createElement('script');
+        const to = setTimeout(() => { cleanup(); onFail && onFail(); }, 12000);
+        function cleanup() { clearTimeout(to); try { delete window[cb]; } catch(_){} if (script.parentNode) script.remove(); }
+        window[cb] = (data) => { cleanup(); onDone(data); };
+        script.onerror = () => { cleanup(); onFail && onFail(); };
+        script.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cb;
+        document.head.appendChild(script);
+      }
+
+      function mapResults(data) {
+        const raw = (data && data.results) || [];
+        const seen = new Set();
+        const out = [];
+        for (const t of raw) {
+          if (!t.trackName || !t.trackId || seen.has(t.trackId)) continue;
+          seen.add(t.trackId);
+          const item = {
+            id: t.trackId,
+            title: t.trackName,
+            artist: t.artistName || 'Unknown',
+            cover: (t.artworkUrl100 || '').replace('100x100bb', '300x300bb').replace('100x100', '300x300'),
+            duration: Math.round((t.trackTimeMillis || 0) / 1000),
+            preview: t.previewUrl || '',
+            explicit: t.trackExplicitness === 'explicit'
+          };
+          try {
+            if (typeof isStopped === 'function' && isStopped(item.title, item.artist)) continue;
+          } catch (_) {}
+          out.push(item);
+        }
+        return out;
+      }
+
+      const base = `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=50&media=music`;
+
+      // 1) RU store first (лучше русские треки)
+      runJsonp(base + '&country=ru&lang=ru_ru', (data) => {
+        results = mapResults(data);
+        if (results.length >= 8) {
+          $('#resTitle').textContent = `Найдено: ${results.length}`;
+          renderResults();
+          return;
+        }
+        // 2) fallback — весь мир
+        runJsonp(base, (data2) => {
+          const more = mapResults(data2);
+          const ids = new Set(results.map(r => r.id));
+          for (const m of more) if (!ids.has(m.id)) results.push(m);
+          $('#resTitle').textContent = results.length ? `Найдено: ${results.length}` : 'Ничего не найдено';
+          renderResults();
+        }, () => {
+          $('#resTitle').textContent = results.length ? `Найдено: ${results.length}` : 'Ошибка сети';
+          renderResults();
+        });
+      }, () => {
+        // RU failed — try global
+        runJsonp(base, (data) => {
+          results = mapResults(data);
+          $('#resTitle').textContent = results.length ? `Найдено: ${results.length}` : 'Ничего не найдено';
+          renderResults();
+        }, () => {
+          $('#results').innerHTML = '<div class="empty">Ошибка сети. Проверь интернет.</div>';
+          $('#resTitle').textContent = 'Ошибка';
+        });
+      });
+    }
+
+    function renderResults() {
+      if (!results.length) {
+        $('#results').innerHTML = '<div class="empty">Ничего не найдено (или трек в стоп-листе)</div>';
+        return;
+      }
+      $('#results').innerHTML = results.map((t, i) => `
+        <div class="track-row ${playingId === t.id ? 'playing' : ''}" data-id="${t.id}" style="animation-delay:${i*0.03}s">
+          <div class="t-cover-wrap">
+            <img class="t-cover" src="${t.cover}" alt="" loading="lazy" />
+            <div class="t-play">▶</div>
+          </div>
+          <div class="t-meta">
+            <div class="t-title">${esc(t.title)}${t.explicit ? '<span class="explicit">E</span>' : ''}</div>
+            <div class="t-artist">${esc(t.artist)}</div>
+          </div>
+          <div class="t-dur">${fmtDuration(t.duration)}</div>
+        </div>
+      `).join('');
+      $$('.track-row').forEach(row => {
+        row.onclick = (e) => {
+          const t = results.find(x => String(x.id) === row.dataset.id);
+          if (!t) return;
+          if (e.target.closest('.t-cover-wrap') && t.preview) { togglePreview(t); return; }
+          openBid(t);
+        };
+      });
+    }
+
+    function stopPreview() {
+      if (audio) { audio.pause(); audio = null; }
+      playingId = null;
+      $('#previewBtn').textContent = '▶ Слушать 30 сек';
+      $('#previewBtn').classList.remove('playing');
+      $$('.track-row').forEach(r => r.classList.remove('playing'));
+    }
+    function togglePreview(t) {
+      if (playingId === t.id) { stopPreview(); return; }
+      stopPreview();
+      if (!t.preview) { toast('Превью нет'); return; }
+      audio = new Audio(t.preview); audio.volume = 0.7;
+      playingId = t.id;
+      audio.play().catch(() => toast('Не удалось воспроизвести'));
+      audio.onended = stopPreview;
+      $('#previewBtn').textContent = '⏸ Остановить';
+      $('#previewBtn').classList.add('playing');
+      $$('.track-row').forEach(r => r.classList.toggle('playing', String(r.dataset.id) === String(t.id)));
+    }
+
+    function openBid(t) {
+      selected = t;
+      $('#sCover').src = t.cover;
+      $('#sTitle').textContent = t.title;
+      $('#sArtist').textContent = t.artist;
+      const min = getSettings().minBid;
+      $('#bidAmount').value = Math.max(200, min);
+      $$('.preset').forEach(p => p.classList.toggle('active', Number(p.dataset.v) === Math.max(200, min)));
+      $('#stepBid').style.display = 'block';
+      $('#stepPay').style.display = 'none';
+      $('#bidOverlay').classList.add('open');
+    }
+    function closeBid() {
+      $('#bidOverlay').classList.remove('open');
+      stopPreview();
+      selected = null;
+    }
+
+    function renderQueue() {
+      const q = getQueue();
+      const badge = $('#qBadge');
+      if (q.length) { badge.style.display = 'grid'; badge.textContent = q.length > 9 ? '9+' : q.length; }
+      else badge.style.display = 'none';
+
+      const block = $('#liveQueueBlock');
+      const list = $('#liveQueue');
+      if (!q.length) { block.style.display = 'none'; }
+      else {
+        block.style.display = 'block';
+        $('#liveCount').textContent = q.length;
+        list.innerHTML = q.slice(0, 8).map((o, i) => queueCard(o, i)).join('');
+        bindRaiseButtons(list);
+      }
+
+      const side = $('#sideBody');
+      if (!q.length) side.innerHTML = '<div class="empty">Очередь пуста</div>';
+      else {
+        side.innerHTML = q.map((o, i) => queueCard(o, i)).join('');
+        bindRaiseButtons(side);
+      }
+    }
+
+    function queueCard(o, i) {
+      const mine = o.guestId === guestId;
+      return `
+        <div class="q-card ${mine ? 'mine' : ''}">
+          <div class="q-pos ${i === 0 ? 'top' : ''}">${i + 1}</div>
+          <img class="q-cover" src="${o.cover || ''}" alt="" />
+          <div class="q-info">
+            <div class="q-title">${esc(o.title)}${mine ? ' · вы' : ''}</div>
+            <div class="q-artist">${esc(o.artist)}</div>
+          </div>
+          <div class="q-right">
+            <div class="q-bid">${fmtMoney(o.bid)}</div>
+            <button class="q-raise" data-id="${o.id}">↑ поднять</button>
+          </div>
+        </div>`;
+    }
+
+    function bindRaiseButtons(root) {
+      root.querySelectorAll('.q-raise').forEach(btn => {
+        btn.onclick = () => {
+          const o = getQueue().find(x => x.id === btn.dataset.id);
+          if (!o) return;
+          raiseTarget = o;
+          $('#rCover').src = o.cover || '';
+          $('#rTitle').textContent = o.title;
+          $('#rArtist').textContent = o.artist;
+          $('#rCurrent').textContent = fmtMoney(o.bid);
+          $('#raiseAmount').value = 100;
+          $$('.raise-p').forEach(p => p.classList.toggle('active', p.dataset.v === '100'));
+          $('#raiseOverlay').classList.add('open');
+        };
+      });
+    }
+
+    // ----- events -----
+    const input = $('#searchInput');
+    input.addEventListener('input', () => {
+      const q = input.value;
+      $('#searchBox').classList.toggle('has-value', q.length > 0);
+      document.body.classList.toggle('searching', q.trim().length > 0);
+      clearTimeout(debounce);
+      debounce = setTimeout(() => search(q), 280);
+    });
+    $('#searchClear').onclick = () => {
+      input.value = ''; document.body.classList.remove('searching');
+      $('#searchBox').classList.remove('has-value'); stopPreview(); input.focus();
+    };
+    $('#goSearch').onclick = () => { input.focus(); document.body.classList.add('searching'); };
+
+    $$('.preset').forEach(btn => {
+      if (btn.classList.contains('raise-p')) return;
+      btn.onclick = () => {
+        $$('.preset:not(.raise-p)').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        $('#bidAmount').value = btn.dataset.v;
+      };
+    });
+    $$('.raise-p').forEach(btn => {
+      btn.onclick = () => {
+        $$('.raise-p').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        $('#raiseAmount').value = btn.dataset.v;
+      };
+    });
+
+    $('#previewBtn').onclick = () => { if (selected) togglePreview(selected); };
+
+    $('#toPay').onclick = () => {
+      const min = getSettings().minBid;
+      const amount = parseInt($('#bidAmount').value, 10);
+      if (!selected || isNaN(amount) || amount < min) {
+        toast('Минимум ' + min + ' ₽'); return;
+      }
+      $('#payAmount').textContent = fmtMoney(amount);
+      $('#stepBid').style.display = 'none';
+      $('#stepPay').style.display = 'block';
+    };
+    $('#backBid').onclick = () => {
+      $('#stepPay').style.display = 'none';
+      $('#stepBid').style.display = 'block';
+    };
+    $('#fakePay').onclick = () => {
+      const amount = parseInt($('#bidAmount').value, 10);
+      const res = createOrder(selected, amount, guestId);
+      if (!res.ok) { toast(res.error); return; }
+      closeBid();
+      toast('Оплачено! Ждём решения диджея', true);
+      input.value = ''; document.body.classList.remove('searching');
+      $('#searchBox').classList.remove('has-value');
+      stopPreview();
+      renderQueue();
+    };
+
+    $('#confirmRaise').onclick = () => {
+      const extra = parseInt($('#raiseAmount').value, 10);
+      if (!raiseTarget || isNaN(extra) || extra < 50) { toast('Минимум +50 ₽'); return; }
+      // mock pay then raise
+      const res = raiseBid(raiseTarget.id, extra, guestId);
+      $('#raiseOverlay').classList.remove('open');
+      if (!res.ok) { toast(res.error); return; }
+      toast('Ставка поднята! ' + fmtMoney(res.order.bid), true);
+      raiseTarget = null;
+      renderQueue();
+    };
+
+    $('#bidOverlay').onclick = e => { if (e.target === $('#bidOverlay')) closeBid(); };
+    $('#raiseOverlay').onclick = e => { if (e.target === $('#raiseOverlay')) $('#raiseOverlay').classList.remove('open'); };
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { closeBid(); $('#raiseOverlay').classList.remove('open'); closePanel(); }
+    });
+
+    function openPanel() { $('#panelOv').classList.add('open'); $('#sidePanel').classList.add('open'); }
+    function closePanel() { $('#panelOv').classList.remove('open'); $('#sidePanel').classList.remove('open'); }
+    $('#queueBtn').onclick = openPanel;
+    $('#panelOv').onclick = closePanel;
+    $('#closePanel').onclick = closePanel;
+
+    window.addEventListener('scroll', () => {
+      $('#header').classList.toggle('scrolled', scrollY > 8);
+    }, { passive: true });
+
+    onSync(() => { applySettings(); renderQueue(); });
+    applySettings();
+    renderQueue();
+    setInterval(renderQueue, 3000); // soft poll
+  </script>
+</body>
+</html>
