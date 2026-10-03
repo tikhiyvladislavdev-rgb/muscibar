@@ -101,6 +101,22 @@ const server = http.createServer(async (req, res) => {
 
   fs.readFile(filePath, (err, data) => {
     if (err) return send(res, 404, 'Not found: ' + u.pathname, 'text/plain');
+
+    // Fix accidental GitHub uploads of Node Buffer JSON dumps:
+    // {"type":"Buffer","data":[60,33,68,...]}
+    try {
+      const asText = data.toString('utf8').trim();
+      if (asText.startsWith('{"type":"Buffer"')) {
+        const parsed = JSON.parse(asText);
+        if (parsed && parsed.type === 'Buffer' && Array.isArray(parsed.data)) {
+          data = Buffer.from(parsed.data);
+          console.log('Decoded Buffer-JSON file:', u.pathname);
+        }
+      }
+    } catch (e) {
+      // keep original data
+    }
+
     const ext = path.extname(filePath);
     const types = {
       '.html': 'text/html',

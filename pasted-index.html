@@ -1,0 +1,1168 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#050505" />
+  <title>Бар Мята · Заказ музыки</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #050505; --card: #121212; --card2: #1a1a1a; --border: #2a2a2a;
+      --text: #f4f4f4; --muted: #888; --accent: #e8ff47;
+      --accent-dim: rgba(232,255,71,.14); --glow: rgba(232,255,71,.3);
+      --mint: #5dffb1; --safe: env(safe-area-inset-bottom, 0px);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: var(--bg); color: var(--text);
+      font-family: Inter, system-ui, sans-serif;
+      min-height: 100dvh; -webkit-font-smoothing: antialiased;
+    }
+    body { display: flex; flex-direction: column; }
+
+    .header {
+      position: sticky; top: 0; z-index: 40;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px;
+      background: rgba(5,5,5,.9); backdrop-filter: blur(16px);
+      border-bottom: 1px solid transparent;
+    }
+    .header.scrolled { border-bottom-color: var(--border); }
+    .logo {
+      width: 40px; height: 40px; border-radius: 50%;
+      border: 2px solid var(--accent); color: var(--accent);
+      display: grid; place-items: center; font-weight: 800; font-size: 13px;
+      box-shadow: 0 0 18px var(--glow);
+    }
+    .header-actions { display: flex; gap: 8px; align-items: center; }
+    .icon-btn {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: var(--card); border: 1px solid var(--border);
+      color: var(--text); display: grid; place-items: center; cursor: pointer;
+      position: relative; font-size: 14px;
+    }
+    .badge {
+      position: absolute; top: -3px; right: -3px;
+      background: var(--accent); color: #000; font-size: 10px; font-weight: 700;
+      min-width: 16px; height: 16px; border-radius: 8px; display: grid; place-items: center;
+    }
+
+    .search-wrap {
+      padding: 10px 16px 6px; position: sticky; top: 64px; z-index: 30;
+      background: linear-gradient(to bottom, var(--bg) 60%, transparent);
+    }
+    .search-box {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 999px; padding: 12px 16px;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .search-box:focus-within {
+      border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+    .search-box input {
+      flex: 1; background: transparent; border: none; outline: none;
+      color: var(--text); font-size: 16px; font-family: inherit;
+    }
+    .search-box input::placeholder { color: var(--muted); }
+    .search-clear {
+      width: 22px; height: 22px; border-radius: 50%; background: #333;
+      border: none; color: #aaa; display: none; place-items: center; cursor: pointer;
+    }
+    .search-box.has-value .search-clear { display: grid; }
+
+    .chips {
+      display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden;
+      padding: 10px 16px 8px;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      touch-action: pan-x;
+      flex-wrap: nowrap;
+      max-width: 100%;
+    }
+    .chips::-webkit-scrollbar { display: none; }
+    .chip {
+      flex: 0 0 auto;
+      background: var(--card); border: 1px solid var(--border);
+      color: var(--text); padding: 8px 14px; border-radius: 999px;
+      font-size: 12.5px; font-weight: 500; cursor: pointer; font-family: inherit;
+      white-space: nowrap;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    .chip:active, .chip.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+
+    .main {
+      flex: 1; padding: 0 16px calc(20px + var(--safe));
+      max-width: 560px; width: 100%; margin: 0 auto;
+      overflow-y: auto; -webkit-overflow-scrolling: touch;
+      min-height: 0;
+    }
+    #results {
+      padding-bottom: 48px;
+      min-height: 200px;
+    }
+    .view-search { min-height: 50vh; }
+
+    .venue { text-align: center; padding: 20px 0 12px; animation: up .4s ease; }
+    @keyframes up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+    .venue-cover-wrap { position: relative; width: 140px; height: 140px; margin: 0 auto 14px; }
+    .venue-cover {
+      width: 100%; height: 100%; border-radius: 20px; object-fit: cover;
+      box-shadow: 0 14px 40px rgba(0,0,0,.55);
+    }
+    .venue-glow {
+      position: absolute; inset: -16px;
+      background: radial-gradient(circle, var(--glow), transparent 70%);
+      opacity: .4; z-index: -1; pointer-events: none;
+    }
+    .venue h1 { font-size: 22px; font-weight: 800; letter-spacing: .5px; }
+    .venue .addr { color: var(--accent); font-size: 13px; margin: 4px 0 10px; font-weight: 500; }
+    .venue .desc { color: var(--muted); font-size: 13px; line-height: 1.5; max-width: 320px; margin: 0 auto 18px; }
+    .btn-cta {
+      display: inline-flex; align-items: center; gap: 8px; justify-content: center;
+      background: var(--accent); color: #0a0a0a; font-weight: 700; font-size: 15px;
+      padding: 14px 28px; border: none; border-radius: 999px; cursor: pointer;
+      box-shadow: 0 4px 22px var(--glow); font-family: inherit; width: 100%; max-width: 300px;
+    }
+
+    .section-title {
+      font-size: 12px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 1px; color: var(--muted); margin: 18px 0 10px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .section-title span { color: var(--accent); }
+
+    .q-card {
+      display: flex; align-items: center; gap: 12px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 10px 12px; margin-bottom: 8px;
+    }
+    .q-card.mine { border-color: var(--accent); background: var(--accent-dim); }
+    .q-pos {
+      width: 26px; height: 26px; border-radius: 50%;
+      background: var(--accent-dim); color: var(--accent);
+      font-size: 11px; font-weight: 700; display: grid; place-items: center; flex-shrink: 0;
+    }
+    .q-pos.top { background: var(--accent); color: #000; }
+    .q-cover { width: 42px; height: 42px; border-radius: 9px; object-fit: cover; flex-shrink: 0; background: #222; }
+    .q-info { flex: 1; min-width: 0; }
+    .q-title { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .q-artist { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .q-right { text-align: right; flex-shrink: 0; }
+    .q-bid { font-size: 13px; font-weight: 700; color: var(--accent); }
+    .q-raise {
+      margin-top: 4px; font-size: 11px;
+      background: transparent; border: 1px solid var(--border);
+      border-radius: 999px; padding: 3px 8px; cursor: pointer; color: var(--text);
+      font-family: inherit;
+    }
+
+    .track-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 12px; background: var(--card); border-radius: 14px;
+      border: 1px solid transparent; cursor: pointer; margin-bottom: 6px;
+      transition: .15s; animation: up .25s ease both;
+    }
+    .track-row:hover { background: var(--card2); border-color: var(--border); }
+    .t-cover-wrap { position: relative; width: 50px; height: 50px; flex-shrink: 0; }
+    .t-cover { width: 100%; height: 100%; border-radius: 10px; object-fit: cover; background: #222; }
+    .t-play {
+      position: absolute; inset: 0; background: rgba(0,0,0,.5); border-radius: 10px;
+      display: grid; place-items: center; opacity: 0; transition: .15s; color: #fff; font-size: 14px;
+    }
+    .track-row:hover .t-play, .track-row.playing .t-play { opacity: 1; }
+    .t-meta { flex: 1; min-width: 0; }
+    .t-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .t-artist { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .t-dur { font-size: 12px; color: var(--muted); }
+    .t-src {
+      font-size: 9px; font-weight: 700; background: #2a2a2a; color: #888;
+      padding: 1px 5px; border-radius: 3px; margin-left: 6px;
+    }
+    .t-src.hot { background: var(--accent-dim); color: var(--accent); }
+
+    .empty { text-align: center; padding: 36px 16px; color: var(--muted); font-size: 14px; }
+    .sk { display: flex; gap: 12px; padding: 10px; margin-bottom: 6px; }
+    .sk-c { width: 50px; height: 50px; border-radius: 10px; background: linear-gradient(90deg,#1a1a1a,#252525,#1a1a1a); background-size: 200%; animation: sh 1.1s infinite; }
+    .sk-l { height: 12px; border-radius: 6px; background: linear-gradient(90deg,#1a1a1a,#252525,#1a1a1a); background-size: 200%; animation: sh 1.1s infinite; margin: 6px 0; }
+    @keyframes sh { 0%{background-position:200%} 100%{background-position:-200%} }
+
+    .overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.72); backdrop-filter: blur(6px);
+      z-index: 100; display: flex; align-items: flex-end; justify-content: center;
+      opacity: 0; pointer-events: none; transition: opacity .25s;
+    }
+    .overlay.open { opacity: 1; pointer-events: auto; }
+    .sheet {
+      background: #111; border: 1px solid var(--border); border-bottom: none;
+      border-radius: 22px 22px 0 0; width: 100%; max-width: 480px;
+      padding: 12px 20px calc(24px + var(--safe));
+      transform: translateY(110%); transition: transform .32s cubic-bezier(.32,.72,0,1);
+      max-height: 90dvh; overflow-y: auto;
+    }
+    .overlay.open .sheet { transform: none; }
+    .handle { width: 36px; height: 4px; background: #333; border-radius: 2px; margin: 0 auto 16px; }
+    .sheet-track { display: flex; gap: 14px; align-items: center; margin-bottom: 16px; }
+    .sheet-track img { width: 68px; height: 68px; border-radius: 12px; object-fit: cover; background: #222; }
+    .sheet-track .tt { font-size: 16px; font-weight: 700; }
+    .sheet-track .ta { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .preview-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--card); border: 1px solid var(--border); color: var(--text);
+      padding: 9px 14px; border-radius: 999px; font-size: 13px; cursor: pointer;
+      margin-bottom: 16px; font-family: inherit;
+    }
+    .preview-btn.playing { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+    .bid-label { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); font-weight: 600; margin-bottom: 8px; }
+    .bid-row {
+      display: flex; align-items: center; background: var(--card);
+      border: 1px solid var(--border); border-radius: 12px; padding: 6px 8px 6px 16px; margin-bottom: 8px;
+    }
+    .bid-row:focus-within { border-color: var(--accent); }
+    .bid-row span { font-size: 18px; font-weight: 700; color: var(--muted); margin-right: 6px; }
+    .bid-row input {
+      flex: 1; background: transparent; border: none; outline: none;
+      color: var(--text); font-size: 26px; font-weight: 800; font-family: inherit;
+    }
+    .bid-hint { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+    .presets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+    .preset {
+      background: var(--card); border: 1px solid var(--border); color: var(--text);
+      padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 600;
+      cursor: pointer; font-family: inherit;
+    }
+    .preset.active { background: var(--accent); color: #0a0a0a; border-color: var(--accent); }
+    .btn-main {
+      width: 100%; background: var(--accent); color: #0a0a0a; font-weight: 800;
+      font-size: 15px; padding: 15px; border: none; border-radius: 999px;
+      cursor: pointer; box-shadow: 0 4px 18px var(--glow); font-family: inherit;
+    }
+    .sbp-box {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 16px; margin-bottom: 16px; text-align: center;
+    }
+    .sbp-logo {
+      font-weight: 800; font-size: 18px; letter-spacing: 1px;
+      background: linear-gradient(90deg, #5B2CFF, #00C2FF); -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent; margin-bottom: 8px;
+    }
+    .sbp-qr {
+      width: 140px; height: 140px; margin: 12px auto; background: #fff; border-radius: 12px;
+      display: grid; place-items: center; color: #111; font-size: 11px; font-weight: 600;
+    }
+    .sbp-amount { font-size: 28px; font-weight: 800; margin: 8px 0; }
+    .sbp-status { font-size: 13px; color: var(--muted); }
+
+    .toast {
+      position: fixed; bottom: calc(24px + var(--safe)); left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: #1a1a1a; border: 1px solid var(--border); color: var(--text);
+      padding: 12px 20px; border-radius: 999px; font-size: 13.5px; font-weight: 500;
+      z-index: 200; transition: transform .3s; white-space: nowrap; max-width: 90vw;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+    .toast.ok { border-color: var(--mint); }
+
+    .panel-ov {
+      position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 80;
+      opacity: 0; pointer-events: none; transition: .25s;
+    }
+    .panel-ov.open { opacity: 1; pointer-events: auto; }
+    .side {
+      position: fixed; top: 0; right: 0; bottom: 0; width: min(360px, 92vw);
+      background: #0e0e0e; border-left: 1px solid var(--border); z-index: 90;
+      transform: translateX(100%); transition: transform .32s cubic-bezier(.32,.72,0,1);
+      display: flex; flex-direction: column;
+    }
+    .side.open { transform: none; }
+    .side-h {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 16px; border-bottom: 1px solid var(--border);
+    }
+    .side-h h2 { font-size: 15px; font-weight: 700; }
+    .side-b { flex: 1; overflow-y: auto; padding: 12px; }
+
+    .view-home { display: block; }
+    .view-search { display: none; }
+    body.searching .view-home { display: none; }
+    body.searching .view-search { display: block; }
+    .footer { text-align: center; padding: 16px; font-size: 12px; color: #555; }
+    .footer a { color: #666; text-decoration: none; }
+
+
+    .ac-box {
+      position: absolute; left: 16px; right: 16px; top: 100%;
+      background: #151515; border: 1px solid var(--border);
+      border-radius: 14px; margin-top: 6px; z-index: 35;
+      max-height: 240px; overflow-y: auto;
+      box-shadow: 0 12px 40px rgba(0,0,0,.5);
+      display: none;
+    }
+    .ac-box.show { display: block; }
+    .ac-item {
+      padding: 10px 14px; cursor: pointer; font-size: 13.5px;
+      border-bottom: 1px solid #222;
+      display: flex; justify-content: space-between; gap: 8px;
+    }
+    .ac-item:last-child { border-bottom: none; }
+    .ac-item:hover, .ac-item.active { background: var(--accent-dim); }
+    .ac-item .a { color: var(--muted); font-size: 12px; }
+    .search-wrap { position: relative; }
+    .genre-tabs {
+      display: flex; gap: 6px; overflow-x: auto; padding: 6px 16px 0;
+      -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    }
+    .genre-tabs::-webkit-scrollbar { display: none; }
+    .g-tab {
+      flex: 0 0 auto; padding: 7px 12px; border-radius: 999px;
+      border: 1px solid var(--border); background: var(--card);
+      color: var(--muted); font-size: 12px; font-weight: 600;
+      cursor: pointer; font-family: inherit;
+    }
+    .g-tab.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+    .status-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 12px; margin-bottom: 10px;
+    }
+    .status-card .st { font-size: 12px; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+    .status-card .eta { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .explicit-warn { color: #ff8a9a; font-size: 11px; margin-top: 4px; }
+
+    /* ===== DEVICE PREVIEW ===== */
+    .device-bar {
+      display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 300;
+      background: #111; border-top: 1px solid var(--border);
+      padding: 10px 12px calc(10px + var(--safe));
+      flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center;
+    }
+    body.device-mode .device-bar { display: flex; }
+    body.device-mode {
+      background: #1a1a1a;
+      align-items: center; justify-content: center;
+      padding: 20px 12px 80px;
+      min-height: 100dvh;
+    }
+    body.device-mode .app-shell {
+      width: var(--device-w, 390px);
+      height: var(--device-h, 844px);
+      max-height: calc(100dvh - 100px);
+      border-radius: var(--device-r, 40px);
+      border: 3px solid #333;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,.6);
+      display: flex; flex-direction: column;
+      background: var(--bg);
+      position: relative;
+      margin: 0 auto;
+    }
+    body.device-mode .app-shell::before {
+      content: '';
+      position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+      width: 80px; height: 22px; background: #000; border-radius: 20px; z-index: 50;
+      display: var(--notch, block);
+    }
+    body:not(.device-mode) .app-shell {
+      display: flex; flex-direction: column; flex: 1; min-height: 100dvh;
+    }
+    .dev-btn {
+      background: var(--card); border: 1px solid var(--border); color: var(--text);
+      padding: 8px 12px; border-radius: 10px; font-size: 12px; font-weight: 600;
+      cursor: pointer; font-family: inherit;
+    }
+    .dev-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+    .dev-btn.close { border-color: #555; }
+
+    @media (min-width: 640px) {
+      .overlay { align-items: center; }
+      .sheet { border-radius: 22px; border: 1px solid var(--border); max-height: 85vh; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell" id="appShell">
+  <header class="header" id="header">
+    <div class="logo" id="logoText">МЯ</div>
+    <div class="header-actions">
+      <button class="icon-btn" id="deviceBtn" title="Превью телефонов">📱</button>
+      <button class="icon-btn" id="queueBtn" title="Очередь">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h12M4 18h14"/></svg>
+        <span class="badge" id="qBadge" style="display:none">0</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="search-wrap">
+    <div class="search-box" id="searchBox">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="searchInput" type="text" placeholder="Трек или артист..." autocomplete="off" spellcheck="false" />
+      <button class="search-clear" id="searchClear">×</button>
+    </div>
+    <div class="ac-box" id="acBox"></div>
+  </div>
+  <div class="genre-tabs" id="genreTabs">
+    <button type="button" class="g-tab active" data-g="all">Все</button>
+    <button type="button" class="g-tab" data-g="hits">Хиты</button>
+    <button type="button" class="g-tab" data-g="ru">Русское</button>
+    <button type="button" class="g-tab" data-g="party">Застолье</button>
+    <button type="button" class="g-tab" data-g="90">90-е</button>
+    <button type="button" class="g-tab" data-g="foreign">Иностранное</button>
+  </div>
+
+  <div class="chips" id="chips">
+    <button type="button" class="chip" data-q="Лепс">Лепс</button>
+    <button type="button" class="chip" data-q="MORGENSHTERN">Morgenstern</button>
+    <button type="button" class="chip" data-q="Instasamka">Instasamka</button>
+    <button type="button" class="chip" data-q="Кино">Цой</button>
+    <button type="button" class="chip" data-q="Jony">Jony</button>
+    <button type="button" class="chip" data-q="Miyagi">Miyagi</button>
+    <button type="button" class="chip" data-q="Скриптонит">Скриптонит</button>
+    <button type="button" class="chip" data-q="Баста">Баста</button>
+    <button type="button" class="chip" data-q="Ленинград">Ленинград</button>
+    <button type="button" class="chip" data-q="Руки Вверх">Руки Вверх</button>
+    <button type="button" class="chip" data-q="Крид">Крид</button>
+    <button type="button" class="chip" data-q="MACAN">MACAN</button>
+  </div>
+
+  <main class="main">
+    <div class="view-home">
+      <div class="venue">
+        <div class="venue-cover-wrap">
+          <div class="venue-glow"></div>
+          <img class="venue-cover" id="venueCover" src="https://images.unsplash.com/photo-1571266028247-d9bb3953780d?w=400&h=400&fit=crop" alt="" />
+        </div>
+        <h1 id="venueName">БАР МЯТА</h1>
+        <div class="addr" id="venueAddr">г. Ельня · ул. Пролетарская 79</div>
+        <p class="desc">Выбери трек, поставь бид, оплати СБП. Можно поднять чужую ставку — песня взлетит в очереди.</p>
+        <button class="btn-cta" id="goSearch">Найти трек</button>
+      </div>
+      <div id="myOrdersBlock" style="display:none">
+        <div class="section-title">Мои заказы</div>
+        <div id="myOrders"></div>
+      </div>
+      <div id="topTodayBlock" style="display:none">
+        <div class="section-title">🔥 Топ сегодня</div>
+        <div id="topToday"></div>
+      </div>
+      <div id="topAllBlock" style="display:none">
+        <div class="section-title">⭐ Часто заказывают</div>
+        <div id="topAll"></div>
+      </div>
+      <div id="liveQueueBlock" style="display:none">
+        <div class="section-title">Живая очередь <span id="liveCount"></span></div>
+        <div id="liveQueue"></div>
+      </div>
+    </div>
+    <div class="view-search">
+      <div class="section-title" id="resTitle">Результаты</div>
+      <div id="results"><div class="empty">Введи трек или артиста</div></div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <a href="admin.html">Админка</a> · <a href="hall.html">Экран зала</a> · <a href="admin.html">Админка</a>
+  </footer>
+  </div><!-- app-shell -->
+
+  <!-- Bid sheet -->
+  <div class="overlay" id="bidOverlay">
+    <div class="sheet">
+      <div class="handle"></div>
+      <div class="sheet-track">
+        <img id="sCover" src="" alt="" />
+        <div><div class="tt" id="sTitle"></div><div class="ta" id="sArtist"></div></div>
+      </div>
+      <button class="preview-btn" id="previewBtn">▶ Слушать 30 сек</button>
+      <div id="stepBid">
+        <div class="bid-label">Сумма бида</div>
+        <div class="bid-row"><span>₽</span><input type="number" id="bidAmount" value="200" min="100" step="50" inputmode="numeric" /></div>
+        <div class="bid-hint" id="bidHint">Минимум 100 ₽</div>
+        <div class="presets">
+          <button class="preset" data-v="100">100</button>
+          <button class="preset active" data-v="200">200</button>
+          <button class="preset" data-v="300">300</button>
+          <button class="preset" data-v="500">500</button>
+          <button class="preset" data-v="1000">1 000</button>
+          <button class="preset" data-v="2000">2 000</button>
+        </div>
+        <button class="btn-main" id="toPay">Перейти к оплате СБП</button>
+      </div>
+      <div id="stepPay" style="display:none">
+        <div class="sbp-box">
+          <div class="sbp-logo">СБП</div>
+          <div class="sbp-amount" id="payAmount">200 ₽</div>
+          <div class="sbp-qr">QR-код (демо)</div>
+          <div class="sbp-status">Отсканируй в банке</div>
+        </div>
+        <button class="btn-main" id="fakePay">Я оплатил (демо)</button>
+        <button class="preview-btn" id="backBid" style="width:100%;justify-content:center;margin-top:10px">← Изменить сумму</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay" id="raiseOverlay">
+    <div class="sheet">
+      <div class="handle"></div>
+      <div class="sheet-track">
+        <img id="rCover" src="" alt="" />
+        <div><div class="tt" id="rTitle"></div><div class="ta" id="rArtist"></div></div>
+      </div>
+      <div class="bid-label">Поднять ставку на</div>
+      <div class="bid-row"><span>₽</span><input type="number" id="raiseAmount" value="100" min="50" step="50" inputmode="numeric" /></div>
+      <div class="bid-hint">Сейчас: <strong id="rCurrent"></strong></div>
+      <div class="presets">
+        <button class="preset raise-p" data-v="50">+50</button>
+        <button class="preset raise-p active" data-v="100">+100</button>
+        <button class="preset raise-p" data-v="200">+200</button>
+        <button class="preset raise-p" data-v="500">+500</button>
+      </div>
+      <button class="btn-main" id="confirmRaise">Поднять и оплатить</button>
+    </div>
+  </div>
+
+  <div class="panel-ov" id="panelOv"></div>
+  <div class="side" id="sidePanel">
+    <div class="side-h">
+      <h2>Живая очередь</h2>
+      <button class="icon-btn" id="closePanel" style="width:36px;height:36px">✕</button>
+    </div>
+    <div class="side-b" id="sideBody"></div>
+  </div>
+
+  <div class="device-bar" id="deviceBar">
+    <button class="dev-btn" data-w="375" data-h="667" data-r="20" data-n="none">iPhone SE</button>
+    <button class="dev-btn active" data-w="390" data-h="844" data-r="40" data-n="block">iPhone 14</button>
+    <button class="dev-btn" data-w="430" data-h="932" data-r="44" data-n="block">iPhone 15 Pro Max</button>
+    <button class="dev-btn" data-w="360" data-h="780" data-r="24" data-n="none">Android</button>
+    <button class="dev-btn" data-w="412" data-h="915" data-r="28" data-n="none">Pixel 7</button>
+    <button class="dev-btn close" id="deviceClose">✕ Выйти</button>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="catalog.js"></script>
+  <script src="shared.js" onerror="alert('Нужен shared.js в той же папке!')"></script>
+  <script>
+    // Catalog from catalog.js + fuzzy helpers
+
+    const LOCAL_HITS = window.MUSIC_CATALOG || [];
+    let activeGenre = 'all';
+    let acIndex = -1;
+
+    const GENRE_MAP = {
+      hits: ['morgenshtern','instasamka','jony','macan','крид','zivert','niletto','hammali','артист','anna asti'],
+      ru: ['лепс','кино','баста','ленинград','скрип','мияги','ддт','сплин','любе','пугач','корж','мот','ёлк','город 312'],
+      party: ['рюмка','лепс','руки вверх','иванушки','круг','розенбаум','калинка','катюша','выпьем','бокал','засто'],
+      '90': ['руки вверх','иванушки','мумий','сплин','кино','ддт','наутилус','би-2','любе','киркоров'],
+      foreign: ['queen','weeknd','drake','imagine','linkin','nirvana','bruno','dua lipa','harry','miley','despacito']
+    };
+
+    function filterByGenre(list) {
+      if (activeGenre === 'all') return list;
+      const keys = GENRE_MAP[activeGenre] || [];
+      return list.filter(t => {
+        const b = (t.title + ' ' + t.artist + ' ' + (t.tags||'')).toLowerCase();
+        return keys.some(k => b.includes(k));
+      });
+    }
+
+    function showAutocomplete(q) {
+      const box = document.getElementById('acBox');
+      if (!box) return;
+      if (!q || q.trim().length < 1) { box.classList.remove('show'); return; }
+      const hits = localSearch(q).slice(0, 8);
+      if (!hits.length) { box.classList.remove('show'); return; }
+      acIndex = -1;
+      box.innerHTML = hits.map((t, i) =>
+        `<div class="ac-item" data-i="${i}" data-q="${(t.title + ' ' + t.artist).replace(/"/g,'&quot;')}">
+          <span>${t.title}</span><span class="a">${t.artist}</span>
+        </div>`
+      ).join('');
+      box.classList.add('show');
+      box.querySelectorAll('.ac-item').forEach(el => {
+        el.onmousedown = (e) => {
+          e.preventDefault();
+          const qq = el.dataset.q;
+          document.getElementById('searchInput').value = qq;
+          box.classList.remove('show');
+          document.body.classList.add('searching');
+          document.getElementById('searchBox').classList.add('has-value');
+          search(qq);
+        };
+      });
+    }
+
+    async function searchViaApi(q) {
+      const base = (typeof getSettings === 'function' && getSettings().searchApi) ||
+        (location.port === '8787' ? '/api/search' : '');
+      if (!base) return [];
+      try {
+        const url = base.includes('?') ? base + '&q=' + encodeURIComponent(q) : base + '?q=' + encodeURIComponent(q);
+        const res = await fetch(url);
+        const data = await res.json();
+        return (data.results || []).map(t => ({ ...t, local: false }));
+      } catch (e) {
+        console.warn('api search fail', e);
+        return [];
+      }
+    }
+
+
+
+    // translit for better iTunes hits
+
+    const guestId = getGuestId();
+    let selected = null, raiseTarget = null, audio = null, playingId = null, results = [], debounce = null;
+
+    const $ = s => document.querySelector(s);
+    const $$ = s => [...document.querySelectorAll(s)];
+
+    function toast(msg, ok) {
+      const t = $('#toast');
+      t.textContent = msg;
+      t.className = 'toast show' + (ok ? ' ok' : '');
+      clearTimeout(t._t);
+      t._t = setTimeout(() => t.classList.remove('show'), 2800);
+    }
+
+    function applySettings() {
+      try {
+        const s = getSettings();
+        document.documentElement.style.setProperty('--accent', s.accent);
+        $('#venueName').textContent = s.venueName;
+        $('#venueAddr').textContent = s.address;
+        $('#logoText').textContent = (s.logoText || 'МЯ').slice(0, 3);
+        if (s.coverUrl) $('#venueCover').src = s.coverUrl;
+        $('#bidHint').textContent = `Минимум ${s.minBid} ₽`;
+        $('#bidAmount').min = s.minBid;
+      } catch (_) {}
+    }
+
+
+    // ---- smart / "drunk" search ----
+    const TR_MAP = {'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'e','ж':'zh','з':'z','и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'ts','ч':'ch','ш':'sh','щ':'sch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya'};
+    function translit(s) {
+      return String(s).toLowerCase().split('').map(c => TR_MAP[c] || c).join('');
+    }
+    function norm(s) {
+      return translit(String(s || '').toLowerCase())
+        .replace(/ё/g, 'e')
+        .replace(/[^a-z0-9а-я\s]/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+    function tokens(s) {
+      return norm(s).split(' ').filter(Boolean);
+    }
+    // simple similarity: shared char bigrams
+    function sim(a, b) {
+      if (!a || !b) return 0;
+      if (a === b) return 1;
+      if (a.includes(b) || b.includes(a)) return 0.85;
+      const bg = (s) => {
+        const g = new Set();
+        for (let i = 0; i < s.length - 1; i++) g.add(s.slice(i, i + 2));
+        return g;
+      };
+      const A = bg(a), B = bg(b);
+      if (!A.size || !B.size) return 0;
+      let inter = 0;
+      A.forEach(x => { if (B.has(x)) inter++; });
+      return (2 * inter) / (A.size + B.size);
+    }
+    function scoreTrack(q, t) {
+      const qt = tokens(q);
+      if (!qt.length) return 0;
+      const title = norm(t.title);
+      const artist = norm(t.artist);
+      const tags = norm(t.tags || '');
+      const blob = title + ' ' + artist + ' ' + tags;
+      let score = 0;
+      let matched = 0;
+      for (const tok of qt) {
+        if (tok.length < 1) continue;
+        if (title === tok) { score += 12; matched++; }
+        else if (title.startsWith(tok)) { score += 9; matched++; }
+        else if (title.includes(tok)) { score += 7; matched++; }
+        else if (artist === tok || artist.startsWith(tok)) { score += 8; matched++; }
+        else if (artist.includes(tok)) { score += 6; matched++; }
+        else if (tags.includes(tok)) { score += 5; matched++; }
+        else if (blob.includes(tok)) { score += 3; matched++; }
+        else {
+          // fuzzy against title/artist words
+          const words = blob.split(' ');
+          let best = 0;
+          for (const w of words) best = Math.max(best, sim(tok, w));
+          if (best > 0.55) { score += best * 4; matched++; }
+        }
+      }
+      // all tokens should roughly match for multi-word queries
+      if (qt.length > 1 && matched < qt.length) score *= (matched / qt.length);
+      if (t.hot) score += 0.5;
+      return score;
+    }
+    function localSearch(q) {
+      const n = norm(q);
+      if (n.length < 1) return [];
+      const scored = LOCAL_HITS.map(t => ({ t, s: scoreTrack(q, t) }))
+        .filter(x => x.s >= 2.5)
+        .sort((a, b) => b.s - a.s);
+      return scored.slice(0, 30).map(x => ({ ...x.t }));
+    }
+
+    function runJsonp(urlParams, onDone, onFail) {
+      const cb = '_cb' + Date.now() + Math.random().toString(36).slice(2, 5);
+      const script = document.createElement('script');
+      const to = setTimeout(() => { cleanup(); onFail && onFail(); }, 9000);
+      function cleanup() {
+        clearTimeout(to);
+        try { delete window[cb]; } catch (_) {}
+        if (script.parentNode) script.remove();
+      }
+      window[cb] = (data) => { cleanup(); onDone(data); };
+      script.onerror = () => { cleanup(); onFail && onFail(); };
+      script.src = `https://itunes.apple.com/search?${urlParams}&callback=${cb}`;
+      document.head.appendChild(script);
+    }
+
+    function mapItunes(data) {
+      const raw = (data && data.results) || [];
+      const seen = new Set();
+      const out = [];
+      for (const t of raw) {
+        if (!t.trackName || !t.trackId || seen.has(t.trackId)) continue;
+        seen.add(t.trackId);
+        const item = {
+          id: t.trackId,
+          title: t.trackName,
+          artist: t.artistName || 'Unknown',
+          cover: (t.artworkUrl100 || '').replace('100x100bb', '300x300bb').replace('100x100', '300x300'),
+          duration: Math.round((t.trackTimeMillis || 0) / 1000),
+          preview: t.previewUrl || '',
+          explicit: t.trackExplicitness === 'explicit',
+          local: false
+        };
+        try { if (isStopped(item.title, item.artist)) continue; } catch (_) {}
+        out.push(item);
+      }
+      return out;
+    }
+
+    function search(q) {
+      const query = q.trim();
+      if (!query) {
+        showHomeSuggestions();
+        return;
+      }
+
+      // 1) Instant fuzzy local (drunk-proof)
+      const local = localSearch(query);
+      results = local;
+      document.body.classList.add('searching');
+      if (results.length) {
+        $('#resTitle').textContent = `Найдено: ${results.length}`;
+        renderResults();
+      } else {
+        $('#results').innerHTML = Array(3).fill(0).map(() => `<div class="sk"><div class="sk-c"></div><div style="flex:1"><div class="sk-l"></div><div class="sk-l" style="width:40%"></div></div></div>`).join('');
+        $('#resTitle').textContent = 'Ищем...';
+      }
+
+      // 2) Parallel iTunes: as-is + translit + first 2 tokens
+      const qLat = translit(query);
+      const toks = tokens(query);
+      const queries = [query];
+      if (qLat !== norm(query)) queries.push(qLat);
+      if (toks.length >= 2) queries.push(toks.slice(0, 2).join(' '));
+      if (toks.length >= 1) queries.push(toks[0]); // artist-only fallback
+
+      let pending = 0;
+      const ids = new Set(results.map(r => r.id));
+      const titles = new Set(results.map(r => norm(r.title) + '|' + norm(r.artist)));
+
+      function merge(list) {
+        for (const t of list) {
+          const k = norm(t.title) + '|' + norm(t.artist);
+          if (ids.has(t.id) || titles.has(k)) continue;
+          ids.add(t.id); titles.add(k);
+          results.push(t);
+        }
+        // re-rank local+remote by score
+        results.sort((a, b) => scoreTrack(query, b) - scoreTrack(query, a));
+        $('#resTitle').textContent = results.length ? `Найдено: ${results.length}` : 'Ничего не найдено';
+        renderResults();
+      }
+
+      const uniqueQ = [...new Set(queries)].slice(0, 4);
+      uniqueQ.forEach(qq => {
+        pending++;
+        const term = encodeURIComponent(qq);
+        runJsonp(`term=${term}&entity=song&limit=25&media=music&country=ru&lang=ru_ru`, d => {
+          merge(mapItunes(d));
+          pending--;
+        }, () => { pending--; });
+      });
+
+      // Deezer via mini-backend if available
+      searchViaApi(query).then(list => {
+        if (list.length) merge(list);
+      });
+    }
+
+    function showHomeSuggestions() {
+      document.body.classList.remove('searching');
+      renderTopBlocks();
+    }
+
+    function renderResults() {
+      let list = filterByGenre(results);
+      if (!list.length) {
+        $('#results').innerHTML = '<div class="empty">Ничего не найдено в этой категории. Смени жанр или запрос.</div>';
+        return;
+      }
+      $('#results').innerHTML = list.map((t, i) => `
+        <div class="track-row ${playingId === t.id ? 'playing' : ''}" data-id="${t.id}" style="animation-delay:${Math.min(i,12)*0.025}s">
+          <div class="t-cover-wrap">
+            <img class="t-cover" src="${t.cover || ''}" alt="" loading="lazy"
+              onerror="this.style.background='linear-gradient(135deg,#222,#333)'" />
+            <div class="t-play">▶</div>
+          </div>
+          <div class="t-meta">
+            <div class="t-title">${esc(t.title)}${t.hot ? '<span class="t-src hot">HIT</span>' : ''}</div>
+            <div class="t-artist">${esc(t.artist)}</div>
+          </div>
+          <div class="t-dur">${t.duration ? fmtDuration(t.duration) : ''}</div>
+        </div>
+      `).join('');
+      $$('.track-row').forEach(row => {
+        row.onclick = (e) => {
+          const t = results.find(x => String(x.id) === String(row.dataset.id));
+          if (!t) return;
+          if (e.target.closest('.t-cover-wrap') && t.preview) { togglePreview(t); return; }
+          openBid(t);
+        };
+      });
+    }
+
+    function stopPreview() {
+      if (audio) { audio.pause(); audio = null; }
+      playingId = null;
+      $('#previewBtn').textContent = '▶ Слушать 30 сек';
+      $('#previewBtn').classList.remove('playing');
+      $$('.track-row').forEach(r => r.classList.remove('playing'));
+    }
+    function togglePreview(t) {
+      if (playingId === t.id) { stopPreview(); return; }
+      stopPreview();
+      if (!t.preview) { toast('Превью нет для этого трека'); return; }
+      audio = new Audio(t.preview); audio.volume = 0.7;
+      playingId = t.id;
+      audio.play().catch(() => toast('Не удалось воспроизвести'));
+      audio.onended = stopPreview;
+      $('#previewBtn').textContent = '⏸ Остановить';
+      $('#previewBtn').classList.add('playing');
+    }
+
+    function openBid(t) {
+      selected = t;
+      $('#sCover').src = t.cover || '';
+      $('#sTitle').textContent = t.title;
+      $('#sArtist').textContent = t.artist;
+      try {
+        if (hasBadWords(t.title)) {
+          toast('18+ в названии — диджей может отклонить');
+        }
+      } catch(_){}
+      const min = getSettings().minBid;
+      $('#bidAmount').value = Math.max(200, min);
+      $$('.preset:not(.raise-p)').forEach(p => p.classList.toggle('active', Number(p.dataset.v) === Math.max(200, min)));
+      $('#stepBid').style.display = 'block';
+      $('#stepPay').style.display = 'none';
+      $('#bidOverlay').classList.add('open');
+    }
+    function closeBid() { $('#bidOverlay').classList.remove('open'); stopPreview(); selected = null; }
+
+
+
+    function renderMyOrders() {
+      try {
+        const orders = getGuestOrders(guestId);
+        const box = $('#myOrdersBlock');
+        const list = $('#myOrders');
+        if (!orders.length) { box.style.display = 'none'; return; }
+        box.style.display = 'block';
+        list.innerHTML = orders.slice(0, 5).map(o => {
+          const st = getOrderStatus(o.id, guestId);
+          const label = st ? st.label : (o.status || 'отправлен');
+          const eta = st && st.eta != null ? ` · ~${st.eta} мин` : '';
+          return `<div class="status-card">
+            <div class="st">${label}${eta}</div>
+            <div class="q-title" style="margin-top:6px">${esc(o.title)}</div>
+            <div class="q-artist">${esc(o.artist)} · ${fmtMoney(o.bid)}</div>
+            <button class="q-raise" style="margin-top:8px" data-repeat-title="${esc(o.title)}" data-repeat-artist="${esc(o.artist)}" data-repeat-cover="${esc(o.cover||'')}">Повторить заказ</button>
+          </div>`;
+        }).join('');
+        list.querySelectorAll('[data-repeat-title]').forEach(btn => {
+          btn.onclick = () => openBid({
+            id: 'rep_' + Date.now(),
+            title: btn.dataset.repeatTitle,
+            artist: btn.dataset.repeatArtist,
+            cover: btn.dataset.repeatCover,
+            duration: 200, preview: '', local: true
+          });
+        });
+        // notify if any became #1
+        orders.forEach(o => {
+          const st = getOrderStatus(o.id, guestId);
+          if (st && st.position === 1) { try { notifyTop(); } catch(_){} }
+        });
+      } catch (e) { console.warn(e); }
+    }
+
+    function renderTopBlocks() {
+      try {
+        const today = typeof getTopToday === 'function' ? getTopToday(8) : [];
+        const all = typeof getTopTracks === 'function' ? getTopTracks(10) : [];
+        const tb = $('#topTodayBlock'), ta = $('#topAllBlock');
+        if (today.length) {
+          tb.style.display = 'block';
+          $('#topToday').innerHTML = today.map((t, i) => `
+            <div class="track-row" data-top="1" data-title="${esc(t.title)}" data-artist="${esc(t.artist)}" data-cover="${esc(t.cover||'')}">
+              <div class="t-cover-wrap"><div class="t-cover" style="background:linear-gradient(135deg,#222,#333);display:grid;place-items:center;font-size:14px;font-weight:700;color:var(--accent)">${i+1}</div></div>
+              <div class="t-meta"><div class="t-title">${esc(t.title)}</div><div class="t-artist">${esc(t.artist)} · ${t.count}×</div></div>
+            </div>`).join('');
+          $('#topToday').querySelectorAll('.track-row').forEach(row => {
+            row.onclick = () => openBid({
+              id: 'top_' + Date.now(),
+              title: row.dataset.title,
+              artist: row.dataset.artist,
+              cover: row.dataset.cover,
+              duration: 200, preview: '', local: true
+            });
+          });
+        } else tb.style.display = 'none';
+
+        if (all.length) {
+          ta.style.display = 'block';
+          $('#topAll').innerHTML = all.map((t, i) => `
+            <div class="track-row" data-title="${esc(t.title)}" data-artist="${esc(t.artist)}" data-cover="${esc(t.cover||'')}">
+              <div class="t-cover-wrap"><div class="t-cover" style="background:linear-gradient(135deg,#1a1a1a,#2a2a2a);display:grid;place-items:center;font-size:12px;color:var(--muted)">${i+1}</div></div>
+              <div class="t-meta"><div class="t-title">${esc(t.title)}</div><div class="t-artist">${esc(t.artist)} · ${t.count}×</div></div>
+            </div>`).join('');
+          $('#topAll').querySelectorAll('.track-row').forEach(row => {
+            row.onclick = () => openBid({
+              id: 'fav_' + Date.now(),
+              title: row.dataset.title,
+              artist: row.dataset.artist,
+              cover: row.dataset.cover,
+              duration: 200, preview: '', local: true
+            });
+          });
+        } else ta.style.display = 'none';
+      } catch (e) { console.warn(e); }
+    }
+
+    function renderQueue() {
+      const q = getQueue();
+      const badge = $('#qBadge');
+      if (q.length) { badge.style.display = 'grid'; badge.textContent = q.length > 9 ? '9+' : q.length; }
+      else badge.style.display = 'none';
+
+      const block = $('#liveQueueBlock');
+      if (!q.length) block.style.display = 'none';
+      else {
+        block.style.display = 'block';
+        $('#liveCount').textContent = q.length;
+        $('#liveQueue').innerHTML = q.slice(0, 8).map((o, i) => queueCard(o, i)).join('');
+        bindRaise($('#liveQueue'));
+      }
+      const side = $('#sideBody');
+      side.innerHTML = q.length ? q.map((o, i) => queueCard(o, i)).join('') : '<div class="empty">Очередь пуста</div>';
+      bindRaise(side);
+    }
+
+    function queueCard(o, i) {
+      const mine = o.guestId === guestId;
+      return `<div class="q-card ${mine ? 'mine' : ''}">
+        <div class="q-pos ${i===0?'top':''}">${i+1}</div>
+        <img class="q-cover" src="${o.cover||''}" alt="" />
+        <div class="q-info"><div class="q-title">${esc(o.title)}${mine?' · вы':''}</div><div class="q-artist">${esc(o.artist)}</div></div>
+        <div class="q-right"><div class="q-bid">${fmtMoney(o.bid)}</div>
+        <button class="q-raise" data-id="${o.id}">↑ поднять</button></div></div>`;
+    }
+    function bindRaise(root) {
+      root.querySelectorAll('.q-raise').forEach(btn => {
+        btn.onclick = () => {
+          const o = getQueue().find(x => x.id === btn.dataset.id);
+          if (!o) return;
+          raiseTarget = o;
+          $('#rCover').src = o.cover || '';
+          $('#rTitle').textContent = o.title;
+          $('#rArtist').textContent = o.artist;
+          $('#rCurrent').textContent = fmtMoney(o.bid);
+          $('#raiseOverlay').classList.add('open');
+        };
+      });
+    }
+
+    // events
+    const input = $('#searchInput');
+    input.addEventListener('input', () => {
+      const q = input.value;
+      $('#searchBox').classList.toggle('has-value', q.length > 0);
+      document.body.classList.toggle('searching', q.trim().length > 0);
+      clearTimeout(debounce);
+      showAutocomplete(q);
+      if (q.trim().length >= 1) {
+        const loc = localSearch(q);
+        if (loc.length) {
+          results = loc;
+          $('#resTitle').textContent = `Найдено: ${loc.length}`;
+          renderResults();
+        }
+      }
+      debounce = setTimeout(() => search(q), 200);
+    });
+    input.addEventListener('blur', () => setTimeout(() => { const b=$('#acBox'); if(b) b.classList.remove('show'); }, 150));
+    input.addEventListener('keydown', (e) => {
+      const box = $('#acBox');
+      if (!box || !box.classList.contains('show')) return;
+      const items = [...box.querySelectorAll('.ac-item')];
+      if (e.key === 'ArrowDown') { e.preventDefault(); acIndex = Math.min(acIndex + 1, items.length - 1); items.forEach((el,i)=>el.classList.toggle('active', i===acIndex)); }
+      if (e.key === 'ArrowUp') { e.preventDefault(); acIndex = Math.max(acIndex - 1, 0); items.forEach((el,i)=>el.classList.toggle('active', i===acIndex)); }
+      if (e.key === 'Enter' && acIndex >= 0 && items[acIndex]) { e.preventDefault(); items[acIndex].dispatchEvent(new Event('mousedown')); }
+    });
+    $('#searchClear').onclick = () => {
+      input.value = ''; document.body.classList.remove('searching');
+      $('#searchBox').classList.remove('has-value'); stopPreview(); input.focus();
+    };
+    $('#goSearch').onclick = () => { input.focus(); document.body.classList.add('searching'); };
+
+    // chips — delegation (works on mobile)
+    const chipsEl = $('#chips');
+    if (chipsEl) {
+      chipsEl.addEventListener('click', (e) => {
+        const c = e.target.closest('.chip');
+        if (!c) return;
+        e.preventDefault();
+        const q = c.dataset.q || c.textContent;
+        input.value = q;
+        $('#searchBox').classList.add('has-value');
+        document.body.classList.add('searching');
+        search(q);
+      });
+    }
+
+    $$('.preset').forEach(btn => {
+      if (btn.classList.contains('raise-p')) {
+        btn.onclick = () => {
+          $$('.raise-p').forEach(p => p.classList.remove('active'));
+          btn.classList.add('active');
+          $('#raiseAmount').value = btn.dataset.v;
+        };
+      } else {
+        btn.onclick = () => {
+          $$('.preset:not(.raise-p)').forEach(p => p.classList.remove('active'));
+          btn.classList.add('active');
+          $('#bidAmount').value = btn.dataset.v;
+        };
+      }
+    });
+
+    $('#previewBtn').onclick = () => { if (selected) togglePreview(selected); };
+    $('#toPay').onclick = () => {
+      const min = getSettings().minBid;
+      const amount = parseInt($('#bidAmount').value, 10);
+      if (!selected || isNaN(amount) || amount < min) { toast('Минимум ' + min + ' ₽'); return; }
+      $('#payAmount').textContent = fmtMoney(amount);
+      $('#stepBid').style.display = 'none';
+      $('#stepPay').style.display = 'block';
+    };
+    $('#backBid').onclick = () => { $('#stepPay').style.display = 'none'; $('#stepBid').style.display = 'block'; };
+    $('#fakePay').onclick = () => {
+      const amount = parseInt($('#bidAmount').value, 10);
+      const res = createOrder(selected, amount, guestId);
+      if (!res.ok) { toast(res.error); return; }
+      closeBid();
+      try { notifySuccess(); } catch(_){}
+      toast('Оплачено! Ждём диджея', true);
+      renderMyOrders();
+      input.value = ''; document.body.classList.remove('searching');
+      $('#searchBox').classList.remove('has-value');
+      renderQueue();
+    };
+    $('#confirmRaise').onclick = () => {
+      const extra = parseInt($('#raiseAmount').value, 10);
+      if (!raiseTarget || isNaN(extra) || extra < 50) { toast('Минимум +50 ₽'); return; }
+      const res = raiseBid(raiseTarget.id, extra, guestId);
+      $('#raiseOverlay').classList.remove('open');
+      if (!res.ok) { toast(res.error); return; }
+      toast('Поднято до ' + fmtMoney(res.order.bid), true);
+      renderQueue();
+    };
+
+    $('#bidOverlay').onclick = e => { if (e.target === $('#bidOverlay')) closeBid(); };
+    $('#raiseOverlay').onclick = e => { if (e.target === $('#raiseOverlay')) $('#raiseOverlay').classList.remove('open'); };
+
+    function openPanel() { $('#panelOv').classList.add('open'); $('#sidePanel').classList.add('open'); }
+    function closePanel() { $('#panelOv').classList.remove('open'); $('#sidePanel').classList.remove('open'); }
+    $('#queueBtn').onclick = openPanel;
+    $('#panelOv').onclick = closePanel;
+    $('#closePanel').onclick = closePanel;
+
+
+    // Genre tabs
+    const gt = document.getElementById('genreTabs');
+    if (gt) {
+      gt.addEventListener('click', (e) => {
+        const tab = e.target.closest('.g-tab');
+        if (!tab) return;
+        gt.querySelectorAll('.g-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        activeGenre = tab.dataset.g || 'all';
+        if (results.length) renderResults();
+        else if (activeGenre !== 'all') {
+          document.body.classList.add('searching');
+          results = filterByGenre(LOCAL_HITS).slice(0, 40);
+          $('#resTitle').textContent = 'Категория: ' + tab.textContent;
+          renderResults();
+        }
+      });
+    }
+
+    // Device preview
+    $('#deviceBtn').onclick = () => {
+      document.body.classList.add('device-mode');
+      applyDevice(390, 844, 40, 'block');
+    };
+    $('#deviceClose').onclick = () => {
+      document.body.classList.remove('device-mode');
+      document.documentElement.style.removeProperty('--device-w');
+      document.documentElement.style.removeProperty('--device-h');
+    };
+    function applyDevice(w, h, r, notch) {
+      document.documentElement.style.setProperty('--device-w', w + 'px');
+      document.documentElement.style.setProperty('--device-h', h + 'px');
+      document.documentElement.style.setProperty('--device-r', r + 'px');
+      document.documentElement.style.setProperty('--notch', notch);
+    }
+    $$('.dev-btn[data-w]').forEach(btn => {
+      btn.onclick = () => {
+        $$('.dev-btn[data-w]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        applyDevice(+btn.dataset.w, +btn.dataset.h, +btn.dataset.r, btn.dataset.n);
+      };
+    });
+
+    window.addEventListener('scroll', () => {
+      $('#header').classList.toggle('scrolled', scrollY > 8);
+    }, { passive: true });
+
+    onSync(() => { applySettings(); renderQueue(); });
+    applySettings();
+    renderQueue();
+    renderTopBlocks();
+    setInterval(() => { renderQueue(); renderMyOrders(); }, 3000);
+  </script>
+</body>
+</html>
